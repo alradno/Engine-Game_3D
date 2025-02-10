@@ -1,0 +1,100 @@
+#version 330 core
+
+in vec3 FragPos;
+in vec2 TexCoords;
+in mat3 TBN;
+
+out vec4 FragColor;
+
+uniform sampler2D albedoMap;           // Se espera que esté en sRGB
+uniform sampler2D metallicRoughnessMap;  // Se asume que la metalicidad está en R y la rugosidad en G
+uniform sampler2D normalMap;             // Normal map
+uniform bool useMaps;                    // Si true, se usan los mapas
+
+uniform vec3 camPos;
+
+layout (std140) uniform LightingData {
+    vec3 lightPos;
+    float pad1;
+    vec3 lightColor;
+    float pad2;
+    vec3 ambientColor;
+    float pad3;
+    float shininess;
+    float pad4[3];
+};
+
+const float PI = 3.14159265359;
+
+vec3 fresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+float DistributionGGX(vec3 N, vec3 H, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
+    float NdotH2 = NdotH * NdotH;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI * denom * denom;
+    return a2 / max(denom, 0.001);
+}
+
+float GeometrySchlickGGX(float NdotV, float roughness) {
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
+    return NdotV / (NdotV * (1.0 - k) + k);
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
+    float ggx1 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx2 = GeometrySchlickGGX(NdotL, roughness);
+    return ggx1 * ggx2;
+}
+
+void main() {
+    // Muestreamos la textura de albedo (incluyendo alfa)
+    vec4 albedoSample = texture(albedoMap, TexCoords);
+    vec3 albedoColor = albedoSample.rgb;
+    float alpha = albedoSample.a;
+    
+    // Se muestrean los mapas; si no se usan, se asignan valores por defecto.
+    float metallic = useMaps ? texture(metallicRoughnessMap, TexCoords).r : 0.0;
+    float roughness = useMaps ? texture(metallicRoughnessMap, TexCoords).g : 1.0;
+    vec3 tangentNormal = useMaps ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
+    tangentNormal = tangentNormal * 2.0 - 1.0;
+    // Si fuera necesario, se podría invertir el canal Y:
+    // tangentNormal.y = -tangentNormal.y;
+    
+    vec3 N = normalize(TBN * tangentNormal);
+    
+    // Calcular F0 para materiales dieléctricos (0.04) y mezclarlos con el albedo según la metalicidad.
+    vec3 F0 = mix(vec3(0.04), albedoColor, metallic);
+    
+    vec3 V = normalize(camPos - FragPos);
+    vec3 L = normalize(lightPos - FragPos);
+    vec3 H = normalize(V + L);
+    
+    float NDF = DistributionGGX(N, H, roughness);
+    float G = GeometrySmith(N, V, L, roughness);
+    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+    
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
+    vec3 specular = numerator / denominator;
+    
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= (1.0 - metallic);
+    
+    float NdotL = max(dot(N, L), 0.0);
+    vec3 Lo = (kD * albedoColor / PI + specular) * lightColor * NdotL;
+    
+    vec3 ambient = ambientColor * albedoColor;
+    vec3 color = ambient + Lo;
+    
+    // La corrección gamma se realiza automáticamente por el framebuffer sRGB.
+    FragColor = vec4(color, alpha);
+}

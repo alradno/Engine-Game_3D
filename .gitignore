@@ -1,0 +1,16 @@
+# Directorios de compilación
+/build/
+/bin/
+/obj/
+
+# Archivos temporales y de sistema
+*.log
+*.tmp
+*.swp
+
+# Configuraciones de IDE (ejemplo para Visual Studio)
+*.vcxproj*
+*.sln
+.vs/
+
+# Otros archivos que no quieras compartir
