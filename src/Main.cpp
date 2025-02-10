@@ -3,7 +3,7 @@
 #include <iostream>
 #include "ResourceManager.h"
 #include "Model.h"
-#include "UniformBuffer.h"
+#include "UniformBuffer.h"   // Ya no se utilizará para la luz, pero se mantiene para otros UBOs
 #include "Camera.h"
 #include "Logger.h"
 #include <glm/glm.hpp>
@@ -12,6 +12,10 @@
 #include <future>
 #include <filesystem>
 #include <windows.h>
+
+// Inclusiones nuevas para el sistema de escenas
+#include "Scene.h"
+#include "ModelNode.h"
 
 // Global project root
 std::string gProjectRoot;
@@ -65,18 +69,6 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
-// Estructura para el UBO de iluminación (cumpliendo std140: 64 bytes)
-struct LightingData {
-    glm::vec3 lightPos;
-    float pad1;       
-    glm::vec3 lightColor;
-    float pad2;
-    glm::vec3 ambientColor;
-    float pad3;
-    float shininess;
-    float pad4[3];    // Para llegar a 64 bytes
-};
-
 int main() {
     // Configuración del Logger
     Logger::SetLogFile("Toxic.log");
@@ -113,17 +105,7 @@ int main() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    // Configurar UBO de iluminación
-    UniformBuffer lightingUBO;
-    LightingData lightingData;
-    lightingData.lightPos = glm::vec3(5.0f, 5.0f, 5.0f);
-    lightingData.lightColor = glm::vec3(1.0f);
-    lightingData.ambientColor = glm::vec3(0.3f);
-    lightingData.shininess = 100.0f;
-    lightingUBO.SetData(sizeof(LightingData), &lightingData, GL_STATIC_DRAW);
-    lightingUBO.BindToPoint(0);
-    
-    // Construir rutas de recursos
+    // --- Carga de recursos ---
     std::string vertexShaderPath = gProjectRoot + "/shaders/pbr_vertex.glsl";
     std::string fragmentShaderPath = gProjectRoot + "/shaders/pbr_fragment.glsl";
     std::string albedoPath = gProjectRoot + "/assets/car/textures/Material_294_baseColor.png";
@@ -133,7 +115,6 @@ int main() {
     std::string normalPath = gProjectRoot + "/assets/car/textures/Material_294_normal.png";
     std::string modelPath = gProjectRoot + "/assets/car/scene.gltf";
     
-    // Cargar recursos de forma asíncrona
     auto shaderFuture = std::async(std::launch::deferred, [vertexShaderPath, fragmentShaderPath]() {
         return ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "pbr");
     });
@@ -172,9 +153,52 @@ int main() {
     
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f/1080.0f, 0.1f, 100.0f);
     glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    // --- Fin carga de recursos ---
     
-    GLuint uniformBlockIndex = glGetUniformBlockIndex(pbrShader->ID, "LightingData");
-    glUniformBlockBinding(pbrShader->ID, uniformBlockIndex, 0);
+    // --- Integración del sistema de escenas ---
+    std::shared_ptr<Scene> scene = std::make_shared<Scene>();
+    std::shared_ptr<ModelNode> carNode = std::make_shared<ModelNode>(carModel);
+    carNode->localTransform = glm::mat4(1.0f);
+    carNode->localTransform = glm::translate(carNode->localTransform, glm::vec3(0.0f, -1.0f, 0.0f));
+    carNode->localTransform = glm::rotate(carNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    carNode->localTransform = glm::scale(carNode->localTransform, glm::vec3(0.01f));
+    scene->GetRoot()->AddChild(carNode);
+    // --- Fin integración de escena ---
+    
+    // --- Configuración de luces ---
+    const int NUM_POINT_LIGHTS = 2;
+    const int NUM_SPOT_LIGHTS = 2;
+    glm::vec3 pointLightPositions[NUM_POINT_LIGHTS] = {
+        glm::vec3(5.0f, 5.0f, 5.0f),
+        glm::vec3(-5.0f, 5.0f, 5.0f)
+    };
+    glm::vec3 pointLightColors[NUM_POINT_LIGHTS] = {
+        glm::vec3(1.0f, 0.5f, 0.5f), // tono rojizo
+        glm::vec3(0.5f, 0.5f, 1.0f)  // tono azulado
+    };
+
+    glm::vec3 spotLightPositions[NUM_SPOT_LIGHTS] = {
+        glm::vec3(0.0f, 5.0f, 0.0f),
+        glm::vec3(0.0f, 5.0f, 5.0f)
+    };
+    glm::vec3 spotLightDirections[NUM_SPOT_LIGHTS] = {
+        glm::vec3(0.0f, -1.0f, 0.0f),
+        glm::vec3(0.0f, -1.0f, -1.0f)
+    };
+    glm::vec3 spotLightColors[NUM_SPOT_LIGHTS] = {
+        glm::vec3(0.5f, 1.0f, 0.5f), // tono verdoso
+        glm::vec3(1.0f, 1.0f, 0.5f)  // tono amarillento
+    };
+    float spotLightCutOff[NUM_SPOT_LIGHTS] = {
+        glm::cos(glm::radians(12.5f)),
+        glm::cos(glm::radians(15.0f))
+    };
+    float spotLightOuterCutOff[NUM_SPOT_LIGHTS] = {
+        glm::cos(glm::radians(17.5f)),
+        glm::cos(glm::radians(20.0f))
+    };
+    glm::vec3 ambientLightColor = glm::vec3(0.2f);
+    // --- Fin configuración de luces ---
     
     // Bucle principal
     while (!glfwWindowShouldClose(window)) {
@@ -191,15 +215,31 @@ int main() {
         glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
         
-        // Orden profesional de transformación: traslación, rotación, escala.
-        glm::mat4 model = glm::mat4(1.0f);
-        model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-        model = glm::scale(model, glm::vec3(0.01f));
-        glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
+        // Actualizar las uniformes de las luces
+        for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
+            std::string uniformName = "pointLights[" + std::to_string(i) + "].position";
+            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(pointLightPositions[i]));
+            uniformName = "pointLights[" + std::to_string(i) + "].color";
+            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(pointLightColors[i]));
+        }
+        for (int i = 0; i < NUM_SPOT_LIGHTS; i++) {
+            std::string uniformName = "spotLights[" + std::to_string(i) + "].position";
+            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightPositions[i]));
+            uniformName = "spotLights[" + std::to_string(i) + "].direction";
+            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightDirections[i]));
+            uniformName = "spotLights[" + std::to_string(i) + "].color";
+            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightColors[i]));
+            uniformName = "spotLights[" + std::to_string(i) + "].cutOff";
+            glUniform1f(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), spotLightCutOff[i]);
+            uniformName = "spotLights[" + std::to_string(i) + "].outerCutOff";
+            glUniform1f(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), spotLightOuterCutOff[i]);
+        }
+        glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientLightColor));
         
-        if (carModel)
-            carModel->Draw();
+        // Actualizar la jerarquía de nodos (calcula las transformaciones globales)
+        scene->Update();
+        // Renderizar la escena: cada nodo envía su matriz "model" y dibuja su contenido.
+        scene->Render(*pbrShader);
         
         glfwSwapBuffers(window);
         glfwPollEvents();

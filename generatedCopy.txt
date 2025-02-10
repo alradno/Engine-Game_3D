@@ -237,8 +237,6 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include "UniformBuffer.h"
 #include "Camera.h"
 #include "Logger.h"
-#include "Scene.h"
-#include "ModelNode.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -246,6 +244,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include <filesystem>
 #include <windows.h>
 
+// Global project root
 std::string gProjectRoot;
 
 std::string GetProjectRoot() {
@@ -260,7 +259,8 @@ std::string GetProjectRoot() {
     return projectRoot.string();
 }
 
-Camera camera;
+Camera camera;  // Instancia global de la cámara
+
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
@@ -296,18 +296,20 @@ void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
     camera.ProcessMouseMovement(xoffset, yoffset);
 }
 
+// Estructura para el UBO de iluminación (cumpliendo std140: 64 bytes)
 struct LightingData {
     glm::vec3 lightPos;
-    float pad1;
+    float pad1;       
     glm::vec3 lightColor;
     float pad2;
     glm::vec3 ambientColor;
     float pad3;
     float shininess;
-    float pad4[3];
+    float pad4[3];    // Para llegar a 64 bytes
 };
 
 int main() {
+    // Configuración del Logger
     Logger::SetLogFile("Toxic.log");
     Logger::SetLogLevel(LogLevel::DEBUG);
     
@@ -342,39 +344,56 @@ int main() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
+    // Configurar UBO de iluminación
     UniformBuffer lightingUBO;
     LightingData lightingData;
     lightingData.lightPos = glm::vec3(5.0f, 5.0f, 5.0f);
-    lightingData.lightColor = glm::vec3(0.5f);
-    lightingData.ambientColor = glm::vec3(0.0f);
+    lightingData.lightColor = glm::vec3(1.0f);
+    lightingData.ambientColor = glm::vec3(0.3f);
     lightingData.shininess = 100.0f;
     lightingUBO.SetData(sizeof(LightingData), &lightingData, GL_STATIC_DRAW);
     lightingUBO.BindToPoint(0);
     
-    // Cargar recursos: dos modelos, uno para el coche y otro para el suelo.
+    // Construir rutas de recursos
     std::string vertexShaderPath = gProjectRoot + "/shaders/pbr_vertex.glsl";
     std::string fragmentShaderPath = gProjectRoot + "/shaders/pbr_fragment.glsl";
-    std::string carModelPath = gProjectRoot + "/assets/car/scene.gltf";
-    std::string groundModelPath = gProjectRoot + "/assets/ground/ground.gltf";
+    std::string albedoPath = gProjectRoot + "/assets/car/textures/Material_294_baseColor.png";
+    std::string albedo2Path = gProjectRoot + "/assets/car/textures/Material_295_baseColor.png";
+    std::string albedo3Path = gProjectRoot + "/assets/car/textures/Material_316_baseColor.png";
+    std::string mrPath = gProjectRoot + "/assets/car/textures/Material_294_metallicRoughness.png";
+    std::string normalPath = gProjectRoot + "/assets/car/textures/Material_294_normal.png";
+    std::string modelPath = gProjectRoot + "/assets/car/scene.gltf";
     
+    // Cargar recursos de forma asíncrona
     auto shaderFuture = std::async(std::launch::deferred, [vertexShaderPath, fragmentShaderPath]() {
         return ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "pbr");
     });
-    auto carModelFuture = std::async(std::launch::deferred, [carModelPath]() {
-        return ResourceManager::LoadModel(carModelPath.c_str(), "car");
+    auto albedoFuture = std::async(std::launch::deferred, [albedoPath]() {
+        return ResourceManager::LoadTexture(albedoPath.c_str(), true, "car_albedo");
     });
-    auto groundModelFuture = std::async(std::launch::deferred, [groundModelPath]() {
-        return ResourceManager::LoadModel(groundModelPath.c_str(), "ground");
+    auto albedo2Future = std::async(std::launch::deferred, [albedo2Path]() {
+        return ResourceManager::LoadTexture(albedo2Path.c_str(), true, "car_albedo2");
+    });
+    auto albedo3Future = std::async(std::launch::deferred, [albedo3Path]() {
+        return ResourceManager::LoadTexture(albedo3Path.c_str(), true, "car_albedo3");
+    });
+    auto mrFuture = std::async(std::launch::deferred, [mrPath]() {
+        return ResourceManager::LoadTexture(mrPath.c_str(), false, "car_mr");
+    });
+    auto normFuture = std::async(std::launch::deferred, [normalPath]() {
+        return ResourceManager::LoadTexture(normalPath.c_str(), false, "car_normal");
+    });
+    auto modelFuture = std::async(std::launch::deferred, [modelPath]() {
+        return ResourceManager::LoadModel(modelPath.c_str(), "car");
     });
     
     auto pbrShader = shaderFuture.get();
-    auto carModel = carModelFuture.get();
-    auto groundModel = groundModelFuture.get();
-    
-    // Marcar el material del suelo como transparente.
-    for (auto &submesh : groundModel->submeshes) {
-        submesh.material.isTransparent = true;
-    }
+    auto albedo = albedoFuture.get();
+    auto albedo2 = albedo2Future.get();
+    auto albedo3 = albedo3Future.get();
+    auto mrMap = mrFuture.get();
+    auto normMap = normFuture.get();
+    auto carModel = modelFuture.get();
     
     pbrShader->Use();
     glUniform1i(glGetUniformLocation(pbrShader->ID, "albedoMap"), 0);
@@ -388,26 +407,7 @@ int main() {
     GLuint uniformBlockIndex = glGetUniformBlockIndex(pbrShader->ID, "LightingData");
     glUniformBlockBinding(pbrShader->ID, uniformBlockIndex, 0);
     
-    // --- SISTEMA DE ESCENAS ---
-    Scene opaqueScene;      // Para el coche (opaco)
-    Scene transparentScene; // Para el suelo (transparente)
-    
-    // Nodo para el coche
-    auto carNode = std::make_shared<ModelNode>(carModel);
-    // Ajusta la transformación del coche (modifica según sea necesario)
-    carNode->localTransform = glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 0.0f, 0.0f));
-    opaqueScene.GetRoot()->AddChild(carNode);
-    
-    // Nodo para el suelo
-    auto groundNode = std::make_shared<ModelNode>(groundModel);
-    // Ajusta la transformación del suelo: asegúrate de que no cubra toda la pantalla.
-    groundNode->localTransform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
-    // Escala el suelo a un tamaño razonable (por ejemplo, 10x10)
-    groundNode->localTransform = glm::scale(groundNode->localTransform, glm::vec3(10.0f));
-    transparentScene.GetRoot()->AddChild(groundNode);
-    Logger::Info("[Main] Scenes constructed with car (opaque) and ground (transparent) nodes.");
-    // ---
-    
+    // Bucle principal
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
@@ -422,15 +422,15 @@ int main() {
         glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
         
-        // Renderizar primero los objetos opacos.
-        opaqueScene.Update();
-        opaqueScene.Render(*pbrShader);
+        // Orden profesional de transformación: traslación, rotación, escala.
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::scale(model, glm::vec3(0.01f));
+        glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
         
-        // Luego renderizar los transparentes: deshabilitar escritura en el depth buffer.
-        glDepthMask(GL_FALSE);
-        transparentScene.Update();
-        transparentScene.Render(*pbrShader);
-        glDepthMask(GL_TRUE);
+        if (carModel)
+            carModel->Draw();
         
         glfwSwapBuffers(window);
         glfwPollEvents();
@@ -444,65 +444,65 @@ int main() {
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Material.cpp
 ------------------------------------------------------------
-#include "Material.h"
-#include "glm/gtc/type_ptr.hpp"
+// #include "Material.h"
+// #include "glm/gtc/type_ptr.hpp"
 
-Material::Material()
-    : albedoColor(1.0f), metalness(0.0f), roughness(1.0f), ao(1.0f),
-      isTransparent(false)
-{
-    Logger::Debug("[Material] Default material created.");
-}
+// Material::Material()
+//     : albedoColor(1.0f), metalness(0.0f), roughness(1.0f), ao(1.0f),
+//       isTransparent(false)
+// {
+//     Logger::Debug("[Material] Default material created.");
+// }
 
-void Material::Apply(const Shader &shader) const {
-    int loc = glGetUniformLocation(shader.ID, "material_isTransparent");
-    if (loc == -1) {
-        Logger::Warning("[Material::Apply] Uniform 'material_isTransparent' not found.");
-    } else {
-        glUniform1i(loc, isTransparent ? 1 : 0);
-    }
+// void Material::Apply(const Shader &shader) const {
+//     int loc = glGetUniformLocation(shader.ID, "material_isTransparent");
+//     if (loc == -1) {
+//         Logger::Warning("[Material::Apply] Uniform 'material_isTransparent' not found.");
+//     } else {
+//         glUniform1i(loc, isTransparent ? 1 : 0);
+//     }
 
-    bool useAlbedoMap = (albedoMap != nullptr);
-    bool useNormalMap = (normalMap != nullptr);
-    bool useMRMap = (metallicRoughnessMap != nullptr);
-    bool useAOMap = (aoMap != nullptr);
+//     bool useAlbedoMap = (albedoMap != nullptr);
+//     bool useNormalMap = (normalMap != nullptr);
+//     bool useMRMap = (metallicRoughnessMap != nullptr);
+//     bool useAOMap = (aoMap != nullptr);
 
-    glUniform1i(glGetUniformLocation(shader.ID, "material_useAlbedoMap"), useAlbedoMap ? 1 : 0);
-    glUniform1i(glGetUniformLocation(shader.ID, "material_useNormalMap"), useNormalMap ? 1 : 0);
-    glUniform1i(glGetUniformLocation(shader.ID, "material_useMetallicRoughnessMap"), useMRMap ? 1 : 0);
-    glUniform1i(glGetUniformLocation(shader.ID, "material_useAOMap"), useAOMap ? 1 : 0);
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useAlbedoMap"), useAlbedoMap ? 1 : 0);
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useNormalMap"), useNormalMap ? 1 : 0);
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useMetallicRoughnessMap"), useMRMap ? 1 : 0);
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useAOMap"), useAOMap ? 1 : 0);
 
-    int textureUnit = 0;
-    if (useAlbedoMap) {
-        glActiveTexture(GL_TEXTURE0 + textureUnit);
-        glBindTexture(GL_TEXTURE_2D, albedoMap->ID);
-        glUniform1i(glGetUniformLocation(shader.ID, "albedoMap"), textureUnit);
-        textureUnit++;
-    }
-    if (useNormalMap) {
-        glActiveTexture(GL_TEXTURE0 + textureUnit);
-        glBindTexture(GL_TEXTURE_2D, normalMap->ID);
-        glUniform1i(glGetUniformLocation(shader.ID, "normalMap"), textureUnit);
-        textureUnit++;
-    }
-    if (useMRMap) {
-        glActiveTexture(GL_TEXTURE0 + textureUnit);
-        glBindTexture(GL_TEXTURE_2D, metallicRoughnessMap->ID);
-        glUniform1i(glGetUniformLocation(shader.ID, "metallicRoughnessMap"), textureUnit);
-        textureUnit++;
-    }
-    if (useAOMap) {
-        glActiveTexture(GL_TEXTURE0 + textureUnit);
-        glBindTexture(GL_TEXTURE_2D, aoMap->ID);
-        glUniform1i(glGetUniformLocation(shader.ID, "aoMap"), textureUnit);
-        textureUnit++;
-    }
+//     int textureUnit = 0;
+//     if (useAlbedoMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, albedoMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "albedoMap"), textureUnit);
+//         textureUnit++;
+//     }
+//     if (useNormalMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, normalMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "normalMap"), textureUnit);
+//         textureUnit++;
+//     }
+//     if (useMRMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, metallicRoughnessMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "metallicRoughnessMap"), textureUnit);
+//         textureUnit++;
+//     }
+//     if (useAOMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, aoMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "aoMap"), textureUnit);
+//         textureUnit++;
+//     }
     
-    glUniform3fv(glGetUniformLocation(shader.ID, "material_albedoColor"), 1, glm::value_ptr(albedoColor));
-    glUniform1f(glGetUniformLocation(shader.ID, "material_metalness"), metalness);
-    glUniform1f(glGetUniformLocation(shader.ID, "material_roughness"), roughness);
-    glUniform1f(glGetUniformLocation(shader.ID, "material_ao"), ao);
-}
+//     glUniform3fv(glGetUniformLocation(shader.ID, "material_albedoColor"), 1, glm::value_ptr(albedoColor));
+//     glUniform1f(glGetUniformLocation(shader.ID, "material_metalness"), metalness);
+//     glUniform1f(glGetUniformLocation(shader.ID, "material_roughness"), roughness);
+//     glUniform1f(glGetUniformLocation(shader.ID, "material_ao"), ao);
+// }
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Material.h
@@ -511,31 +511,19 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Material.h
 #define MATERIAL_H
 
 #include <memory>
-#include <glm/glm.hpp>
 #include "Texture2D.h"
-#include "Shader.h"
-#include "Logger.h"
 
-class Material {
-public:
-    std::shared_ptr<Texture2D> albedoMap;
-    std::shared_ptr<Texture2D> normalMap;
-    std::shared_ptr<Texture2D> metallicRoughnessMap;
-    std::shared_ptr<Texture2D> aoMap;
+// Estructura para almacenar la información de un material.
+// Cada material puede tener su textura de albedo, metallic‑roughness y normal.
+struct Material {
+    std::shared_ptr<Texture2D> albedo;
+    std::shared_ptr<Texture2D> metallicRoughness;
+    std::shared_ptr<Texture2D> normal;
 
-    glm::vec3 albedoColor;
-    float metalness;
-    float roughness;
-    float ao;
-
-    bool isTransparent;
-
-    Material();
-
-    void Apply(const Shader &shader) const;
+    Material() : albedo(nullptr), metallicRoughness(nullptr), normal(nullptr) { }
 };
 
-#endif // MATERIAL_H
+#endif
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.cpp
@@ -546,6 +534,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.cpp
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
+#include <assimp/material.h>
 #include <sstream>
 #include <filesystem>
 #include "Logger.h"
@@ -556,8 +545,7 @@ void Model::loadModel(const std::string &path) {
     const aiScene* scene = importer.ReadFile(path, 
         aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-        Logger::Error("[Model::loadModel] ERROR: Assimp failed to open file: " + path +
-                      "\nReason: " + importer.GetErrorString());
+        Logger::Error("[Model::loadModel] ERROR: Assimp failed to open file: " + path + "\nReason: " + importer.GetErrorString());
         return;
     }
     
@@ -565,12 +553,10 @@ void Model::loadModel(const std::string &path) {
     std::string modelDir = modelFilePath.parent_path().generic_string();
     Logger::Info("[Model::loadModel] Model base directory: " + modelDir);
     
-    // Procesar cada malla como un submesh.
     for (unsigned int i = 0; i < scene->mNumMeshes; i++) {
         aiMesh* mesh = scene->mMeshes[i];
         Submesh submesh;
-        Logger::Info("[Model::loadModel] Processing mesh " + std::to_string(i) +
-                     " with " + std::to_string(mesh->mNumVertices) + " vertices.");
+        Logger::Info("[Model::loadModel] Processing mesh " + std::to_string(i) + " with " + std::to_string(mesh->mNumVertices) + " vertices.");
         
         for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
             Vertex vertex;
@@ -607,9 +593,9 @@ void Model::loadModel(const std::string &path) {
             }
         }
         
-        Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) + " has " +
-                     std::to_string(mesh->mNumFaces) + " faces.");
+        Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) + " has " + std::to_string(mesh->mNumFaces) + " faces.");
         
+        // Procesamiento de materiales y texturas (similarmente se usan Logger en lugar de std::cout y std::cerr)
         if (scene->HasMaterials()) {
             aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
             std::string albedoPath = GetTexturePath(material, aiTextureType_BASE_COLOR, modelDir);
@@ -617,7 +603,7 @@ void Model::loadModel(const std::string &path) {
                 albedoPath = GetTexturePath(material, aiTextureType_DIFFUSE, modelDir);
             if (!albedoPath.empty()) {
                 Logger::Info("[Model::loadModel] Loading albedo texture: " + albedoPath);
-                submesh.material.albedoMap = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
+                submesh.material.albedo = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
             } else {
                 Logger::Warning("[Model::loadModel] No albedo texture path found for mesh " + std::to_string(i));
             }
@@ -625,7 +611,7 @@ void Model::loadModel(const std::string &path) {
             std::string normalPath = GetTexturePath(material, aiTextureType_NORMALS, modelDir);
             if (!normalPath.empty()) {
                 Logger::Info("[Model::loadModel] Loading normal texture: " + normalPath);
-                submesh.material.normalMap = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
+                submesh.material.normal = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
             } else {
                 Logger::Warning("[Model::loadModel] No normal texture path found for mesh " + std::to_string(i));
             }
@@ -635,7 +621,7 @@ void Model::loadModel(const std::string &path) {
                 mrPath = GetTexturePath(material, aiTextureType_SPECULAR, modelDir);
             if (!mrPath.empty()) {
                 Logger::Info("[Model::loadModel] Loading metallic/roughness texture: " + mrPath);
-                submesh.material.metallicRoughnessMap = ResourceManager::LoadTexture(mrPath.c_str(), false, mrPath);
+                submesh.material.metallicRoughness = ResourceManager::LoadTexture(mrPath.c_str(), false, mrPath);
             } else {
                 Logger::Warning("[Model::loadModel] No metallic/roughness texture path found for mesh " + std::to_string(i));
             }
@@ -650,14 +636,14 @@ void Model::loadModel(const std::string &path) {
     Logger::Info("[Model::loadModel] Total submeshes: " + std::to_string(submeshes.size()));
 }
 
-void Model::Draw(const Shader &shader) {
+void Model::Draw() {
     Logger::Info("[Model::Draw] Drawing model with " + std::to_string(submeshes.size()) + " submeshes.");
     for (size_t i = 0; i < submeshes.size(); ++i) {
         if (submeshes[i].vertices.empty() || submeshes[i].indices.empty()) {
             Logger::Warning("[Model::Draw] Submesh " + std::to_string(i) + " has invalid data. Skipping draw.");
             continue;
         }
-        submeshes[i].Draw(shader);
+        submeshes[i].Draw();
     }
 }
 
@@ -669,9 +655,9 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.h
 
 #include <string>
 #include <vector>
-#include "ModelLoader.h"  // Define Vertex and processNode.
-#include "Submesh.h"      // Define Submesh.
-#include "Material.h"     // Define Material.
+#include "ModelLoader.h"  // Defines Vertex and processNode
+#include "Submesh.h"      // Defines Submesh
+#include "Material.h"     // Defines Material
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -679,9 +665,13 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.h
 #include <iostream>
 #include "ResourceManager.h"
 #include <filesystem>
+#include "Logger.h"
 
+// Global project root (if needed elsewhere)
 extern std::string gProjectRoot;
 
+// Inline helper function to get the texture path from an aiMaterial.
+// If the path is relative, it prepends the model's base directory.
 inline std::string GetTexturePath(aiMaterial* material, aiTextureType type, const std::string& baseDir) {
     aiString str;
     if (material->GetTexture(type, 0, &str) != AI_SUCCESS) {
@@ -693,11 +683,11 @@ inline std::string GetTexturePath(aiMaterial* material, aiTextureType type, cons
         }
     }
     std::string relPath(str.C_Str());
-    std::cout << "[GetTexturePath] Original path from material: " << relPath << std::endl;
+    Logger::Debug("[GetTexturePath] Original path from material: " + relPath);
     std::filesystem::path fsPath(relPath);
     if (!fsPath.is_absolute()) {
         std::string absPath = baseDir + "/" + relPath;
-        std::cout << "[GetTexturePath] Converted to absolute path using model directory: " << absPath << std::endl;
+        Logger::Debug("[GetTexturePath] Converted to absolute path using model directory: " + absPath);
         return absPath;
     }
     return relPath;
@@ -711,8 +701,7 @@ public:
         loadModel(path);
     }
     
-    // Ahora recibe el objeto Shader para renderizar.
-    void Draw(const Shader &shader);
+    void Draw();
     
 private:
     void loadModel(const std::string &path);
@@ -1266,8 +1255,8 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Submesh.h
 #include <vector>
 #include <iostream>
 #include <glad/glad.h>
-#include "ModelLoader.h"  // Define la estructura Vertex.
-#include "Material.h"     // Define la clase Material.
+#include "ModelLoader.h"  // Define la estructura Vertex
+#include "Material.h"     // Define la estructura Material
 #include "Logger.h"
 
 struct Submesh {
@@ -1316,26 +1305,44 @@ struct Submesh {
                       ", TexCoords: " + std::to_string(offsetof(Vertex, TexCoords)) +
                       ", Tangent: " + std::to_string(offsetof(Vertex, Tangent)));
         
-        // Atributo 0: posición.
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
         glEnableVertexAttribArray(0);
-        // Atributo 1: normal.
+        
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
         glEnableVertexAttribArray(1);
-        // Atributo 2: coordenadas de textura.
+        
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
         glEnableVertexAttribArray(2);
-        // Atributo 3: tangente.
+        
         glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
         glEnableVertexAttribArray(3);
         
         glBindVertexArray(0);
     }
     
-    // Se añade un parámetro shaderProgram para aplicar el material antes de dibujar.
-    void Draw(const Shader &shader) {
-        // Aplica el material al shader actual
-        material.Apply(shader);
+    void Draw() {
+        if (material.albedo) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, material.albedo->ID);
+        }
+        if (material.metallicRoughness) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID);
+        }
+        if (material.normal) {
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, material.normal->ID);
+        }
+        
+        if (VAO == 0) {
+            Logger::Error("[Submesh::Draw] VAO not configured.");
+            return;
+        }
+        if (indices.empty()) {
+            Logger::Warning("[Submesh::Draw] Index vector is empty.");
+            return;
+        }
+        Logger::Debug("[Submesh::Draw] Drawing submesh with " + std::to_string(indices.size()) + " indices.");
         glBindVertexArray(VAO);
         glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
         GLenum err = glGetError();
@@ -1519,21 +1526,10 @@ in mat3 TBN;
 
 out vec4 FragColor;
 
-uniform sampler2D albedoMap;
-uniform sampler2D metallicRoughnessMap;
-uniform sampler2D normalMap;
-uniform sampler2D aoMap;
-
-uniform bool material_useAlbedoMap;
-uniform bool material_useNormalMap;
-uniform bool material_useMetallicRoughnessMap;
-uniform bool material_useAOMap;
-uniform bool material_isTransparent;
-
-uniform vec3 material_albedoColor;
-uniform float material_metalness;
-uniform float material_roughness;
-uniform float material_ao;
+uniform sampler2D albedoMap;           // Se espera que esté en sRGB
+uniform sampler2D metallicRoughnessMap;  // Se asume que la metalicidad está en R y la rugosidad en G
+uniform sampler2D normalMap;             // Normal map
+uniform bool useMaps;                    // Si true, se usan los mapas
 
 uniform vec3 camPos;
 
@@ -1579,73 +1575,48 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 void main() {
-    if (material_isTransparent) {
-        // Para depuración, pinta rojo semitransparente:
-        // vec4 texColor = texture(albedoMap, TexCoords);
-        // FragColor = vec4(1.0, 0.0, 0.0, texColor.a);
-        // En vez de eso, simplemente muéstralo tal cual:
-        FragColor = texture(albedoMap, TexCoords);
-        return;
-    }
+    // Muestreamos la textura de albedo (incluyendo alfa)
+    vec4 albedoSample = texture(albedoMap, TexCoords);
+    vec3 albedoColor = albedoSample.rgb;
+    float alpha = albedoSample.a;
     
-    vec3 albedoColor = material_albedoColor;
-    if (material_useAlbedoMap) {
-        vec4 texColor = texture(albedoMap, TexCoords);
-        albedoColor *= texColor.rgb;
-    }
-    
-    float metalness = material_metalness;
-    float roughness = material_roughness;
-    if (material_useMetallicRoughnessMap) {
-        vec4 mr = texture(metallicRoughnessMap, TexCoords);
-        metalness *= mr.r;
-        roughness *= mr.g;
-    }
-    
-    vec3 tangentNormal = vec3(0.5, 0.5, 1.0);
-    if (material_useNormalMap) {
-        tangentNormal = texture(normalMap, TexCoords).rgb;
-    }
+    // Se muestrean los mapas; si no se usan, se asignan valores por defecto.
+    float metallic = useMaps ? texture(metallicRoughnessMap, TexCoords).r : 0.0;
+    float roughness = useMaps ? texture(metallicRoughnessMap, TexCoords).g : 1.0;
+    vec3 tangentNormal = useMaps ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
     tangentNormal = tangentNormal * 2.0 - 1.0;
+    // Si fuera necesario, se podría invertir el canal Y:
+    // tangentNormal.y = -tangentNormal.y;
+    
     vec3 N = normalize(TBN * tangentNormal);
     
-    float ambientOcclusion = material_ao;
-    if (material_useAOMap) {
-        ambientOcclusion *= texture(aoMap, TexCoords).r;
-    }
+    // Calcular F0 para materiales dieléctricos (0.04) y mezclarlos con el albedo según la metalicidad.
+    vec3 F0 = mix(vec3(0.04), albedoColor, metallic);
     
     vec3 V = normalize(camPos - FragPos);
     vec3 L = normalize(lightPos - FragPos);
     vec3 H = normalize(V + L);
     
-    vec3 F0 = mix(vec3(0.04), albedoColor, metalness);
-    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-    
     float NDF = DistributionGGX(N, H, roughness);
     float G = GeometrySmith(N, V, L, roughness);
+    vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+    
     vec3 numerator = NDF * G * F;
     float denominator = 4.0 * max(dot(N, V), 0.0) * max(dot(N, L), 0.0) + 0.001;
     vec3 specular = numerator / denominator;
     
     vec3 kS = F;
     vec3 kD = vec3(1.0) - kS;
-    kD *= (1.0 - metalness);
+    kD *= (1.0 - metallic);
     
     float NdotL = max(dot(N, L), 0.0);
     vec3 Lo = (kD * albedoColor / PI + specular) * lightColor * NdotL;
     
-    vec3 ambient = ambientColor * albedoColor * ambientOcclusion;
+    vec3 ambient = ambientColor * albedoColor;
     vec3 color = ambient + Lo;
     
-    // Tone mapping (Reinhard) con exposición.
-    float exposure = 1.0;
-    vec3 mapped = vec3(1.0) - exp(-color * exposure);
-    color = mapped;
-    
-    // Corrección gamma (si usas glEnable(GL_FRAMEBUFFER_SRGB), puedes omitir esta línea)
-    color = pow(color, vec3(1.0 / 2.2));
-    
-    FragColor = vec4(color, 1.0);
+    // La corrección gamma se realiza automáticamente por el framebuffer sRGB.
+    FragColor = vec4(color, alpha);
 }
 
 ------------------------------------------------------------
@@ -1671,8 +1642,10 @@ void main()
     FragPos = vec3(worldPos);
     TexCoords = aTexCoords;
     
+    // Transformamos la normal y el tangente al espacio mundo
     vec3 N = normalize(mat3(transpose(inverse(model))) * aNormal);
     vec3 T = normalize(mat3(model) * aTangent);
+    // Re-ortogonalizamos el tangente respecto a la normal
     T = normalize(T - N * dot(N, T));
     vec3 B = normalize(cross(N, T));
     

@@ -6,12 +6,12 @@ Instalar librerias para msvc
 3. cmake -G "Visual Studio 17 2022" -DCMAKE_INSTALL_PREFIX="path to unzipped folder" ..
 Ejemplo para glfw: cmake -G "Visual Studio 17 2022" -DCMAKE_INSTALL_PREFIX=".\install" ..
 4. cmake --build . --config Release --target INSTALL
-6. Se habrá genrado una carpeta install dentro de build_msvc
+6. Se habrá generado una carpeta install dentro de build_msvc
 7. Crear una carpeta con el nombre limpio sin version en ${workspaceFolder}/libs
 Ejemplo: Para glfw-3.4 sera glfw
 8. Copiar el cotenido de esta carpeta en ${workspaceFolder}/libs/nombreLibreria
 9. Editar el CMakeList.txt para añadir la libreria automaticamente
-Ejemplo si tuvieramos esto incialmente:
+Ejemplo si tuvieramos esto inicialmente:
 target_link_libraries(Toxic
     "${CMAKE_SOURCE_DIR}/libs/assimp/lib/assimp-vc143-mt.lib"
     opengl32
