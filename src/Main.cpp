@@ -3,7 +3,7 @@
 #include <iostream>
 #include "ResourceManager.h"
 #include "Model.h"
-#include "UniformBuffer.h"   // Ya no se utilizará para la luz, pero se mantiene para otros UBOs
+#include "UniformBuffer.h"   // Se utiliza para otros UBOs
 #include "Camera.h"
 #include "Logger.h"
 #include <glm/glm.hpp>
@@ -13,9 +13,13 @@
 #include <filesystem>
 #include <windows.h>
 
-// Inclusiones nuevas para el sistema de escenas
+// Inclusiones para el sistema de escenas
 #include "Scene.h"
 #include "ModelNode.h"
+
+// Inclusiones para luces (nueva estructura basada en vec4)
+#include "Light.h"
+#include "LightManager.h"
 
 // Global project root
 std::string gProjectRoot;
@@ -165,40 +169,63 @@ int main() {
     scene->GetRoot()->AddChild(carNode);
     // --- Fin integración de escena ---
     
-    // --- Configuración de luces ---
-    const int NUM_POINT_LIGHTS = 2;
-    const int NUM_SPOT_LIGHTS = 2;
-    glm::vec3 pointLightPositions[NUM_POINT_LIGHTS] = {
-        glm::vec3(5.0f, 5.0f, 5.0f),
-        glm::vec3(-5.0f, 5.0f, 5.0f)
-    };
-    glm::vec3 pointLightColors[NUM_POINT_LIGHTS] = {
-        glm::vec3(1.0f, 0.5f, 0.5f), // tono rojizo
-        glm::vec3(0.5f, 0.5f, 1.0f)  // tono azulado
-    };
-
-    glm::vec3 spotLightPositions[NUM_SPOT_LIGHTS] = {
-        glm::vec3(0.0f, 5.0f, 0.0f),
-        glm::vec3(0.0f, 5.0f, 5.0f)
-    };
-    glm::vec3 spotLightDirections[NUM_SPOT_LIGHTS] = {
-        glm::vec3(0.0f, -1.0f, 0.0f),
-        glm::vec3(0.0f, -1.0f, -1.0f)
-    };
-    glm::vec3 spotLightColors[NUM_SPOT_LIGHTS] = {
-        glm::vec3(0.5f, 1.0f, 0.5f), // tono verdoso
-        glm::vec3(1.0f, 1.0f, 0.5f)  // tono amarillento
-    };
-    float spotLightCutOff[NUM_SPOT_LIGHTS] = {
-        glm::cos(glm::radians(12.5f)),
-        glm::cos(glm::radians(15.0f))
-    };
-    float spotLightOuterCutOff[NUM_SPOT_LIGHTS] = {
-        glm::cos(glm::radians(17.5f)),
-        glm::cos(glm::radians(20.0f))
-    };
-    glm::vec3 ambientLightColor = glm::vec3(0.2f);
-    // --- Fin configuración de luces ---
+    // --- Configuración de luces usando LightManager ---
+    LightManager lightManager;
+    
+    // Agregar dos luces puntuales (nueva estructura basada en vec4)
+    {
+        Light pointLight1 = {};
+        // Tipo 0 para luz puntual (almacenar el tipo en la componente x)
+        pointLight1.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        pointLight1.position = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
+        pointLight1.direction = glm::vec4(0.0f); // No se utiliza para luz puntual
+        // Color rojizo (RGB) y en la componente w se guarda la intensidad (1.0)
+        pointLight1.colorAndIntensity = glm::vec4(1.0f, 0.5f, 0.5f, 1.0f);
+        pointLight1.spotParams = glm::vec4(0.0f); // No se usa en punto luz
+        lightManager.AddLight(pointLight1);
+    
+        Light pointLight2 = {};
+        pointLight2.typeAndPadding = glm::vec4(0, 0, 0, 0); // Luz puntual
+        pointLight2.position = glm::vec4(-5.0f, 5.0f, 5.0f, 1.0f);
+        pointLight2.direction = glm::vec4(0.0f);
+        // Color blanco con intensidad 1.0
+        pointLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        pointLight2.spotParams = glm::vec4(0.0f);
+        lightManager.AddLight(pointLight2);
+    }
+    
+    // Agregar dos luces focales (spot)
+    {
+        Light spotLight1 = {};
+        spotLight1.typeAndPadding = glm::vec4(1, 0, 0, 0); // Tipo 1 para spot
+        spotLight1.position = glm::vec4(0.0f, 5.0f, 0.0f, 1.0f);
+        // Dirección de la luz, en este caso se normaliza (w no es relevante)
+        spotLight1.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
+        spotLight1.colorAndIntensity = glm::vec4(0.5f, 1.0f, 0.5f, 1.0f);
+        // x: cutOff, y: outerCutOff (en coseno), z y w: padding
+        spotLight1.spotParams = glm::vec4(glm::cos(glm::radians(12.5f)),
+                                           glm::cos(glm::radians(17.5f)),
+                                           0.0f, 0.0f);
+        lightManager.AddLight(spotLight1);
+    
+        Light spotLight2 = {};
+        spotLight2.typeAndPadding = glm::vec4(1, 0, 0, 0); // Spot
+        spotLight2.position = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
+        spotLight2.direction = glm::vec4(0.0f, -1.0f, -1.0f, 0.0f);
+        spotLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 0.5f, 1.0f);
+        spotLight2.spotParams = glm::vec4(glm::cos(glm::radians(15.0f)),
+                                           glm::cos(glm::radians(20.0f)),
+                                           0.0f, 0.0f);
+        lightManager.AddLight(spotLight2);
+    }
+    
+    // Vincular el bloque uniforme "LightBlock" a la unidad de enlace 1
+    unsigned int lightBlockIndex = glGetUniformBlockIndex(pbrShader->ID, "LightBlock");
+    if (lightBlockIndex == GL_INVALID_INDEX) {
+        Logger::Error("[Main] 'LightBlock' uniform block not found in shader.");
+    } else {
+        glUniformBlockBinding(pbrShader->ID, lightBlockIndex, 1);
+    }
     
     // Bucle principal
     while (!glfwWindowShouldClose(window)) {
@@ -215,25 +242,12 @@ int main() {
         glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
         
-        // Actualizar las uniformes de las luces
-        for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
-            std::string uniformName = "pointLights[" + std::to_string(i) + "].position";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(pointLightPositions[i]));
-            uniformName = "pointLights[" + std::to_string(i) + "].color";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(pointLightColors[i]));
-        }
-        for (int i = 0; i < NUM_SPOT_LIGHTS; i++) {
-            std::string uniformName = "spotLights[" + std::to_string(i) + "].position";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightPositions[i]));
-            uniformName = "spotLights[" + std::to_string(i) + "].direction";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightDirections[i]));
-            uniformName = "spotLights[" + std::to_string(i) + "].color";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightColors[i]));
-            uniformName = "spotLights[" + std::to_string(i) + "].cutOff";
-            glUniform1f(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), spotLightCutOff[i]);
-            uniformName = "spotLights[" + std::to_string(i) + "].outerCutOff";
-            glUniform1f(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), spotLightOuterCutOff[i]);
-        }
+        // Actualizar el UBO de las luces y vincularlo al binding point 1
+        lightManager.UpdateUBO();
+        lightManager.lightUBO.BindToPoint(1);
+        
+        // Actualizar uniformes adicionales (por ejemplo, la iluminación ambiental)
+        glm::vec3 ambientLightColor = glm::vec3(0.2f);
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientLightColor));
         
         // Actualizar la jerarquía de nodos (calcula las transformaciones globales)

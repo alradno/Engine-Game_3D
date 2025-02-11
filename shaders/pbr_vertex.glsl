@@ -18,12 +18,14 @@ void main()
     FragPos = vec3(worldPos);
     TexCoords = aTexCoords;
     
-    // Transformamos la normal y el tangente al espacio mundo
-    vec3 N = normalize(mat3(transpose(inverse(model))) * aNormal);
-    vec3 T = normalize(mat3(model) * aTangent);
-    // Re-ortogonalizamos el tangente respecto a la normal
+    // Calcular la matriz normal para transformar tanto la normal como el tangente
+    mat3 normalMatrix = mat3(transpose(inverse(model)));
+    
+    vec3 N = normalize(normalMatrix * aNormal);
+    vec3 T = normalize(normalMatrix * aTangent);
+    // Re-ortogonalizar el tangente respecto a la normal
     T = normalize(T - N * dot(N, T));
-    vec3 B = normalize(cross(N, T));
+    vec3 B = cross(N, T);
     
     TBN = mat3(T, B, N);
     
