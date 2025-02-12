@@ -6,7 +6,7 @@
 #include <future>
 #include <mutex>
 
-// Global caches for resources
+// Global caches for resources.
 std::map<std::string, std::shared_ptr<Shader>>    ResourceManager::Shaders;
 std::map<std::string, std::shared_ptr<Texture2D>> ResourceManager::Textures;
 std::map<std::string, std::shared_ptr<Model>>     ResourceManager::Models;
@@ -18,13 +18,16 @@ std::shared_ptr<Shader> ResourceManager::LoadShader(const char* vShaderFile, con
     std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
     std::string fragmentPath = FileUtils::NormalizePath(fShaderFile);
     Logger::Info("[ResourceManager::LoadShader] Loading shader: " + vertexPath + ", " + fragmentPath + " (name: " + name + ")");
+    
     std::shared_ptr<Shader> shader = std::make_shared<Shader>();
     shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
+    
     if (shader->ID == 0) {
-        Logger::Error("[ResourceManager::LoadShader] Shader " + name + " did not compile correctly.");
+        Logger::Error("[ResourceManager::LoadShader] Shader '" + name + "' did not compile correctly.");
     } else {
         Logger::Info("[ResourceManager::LoadShader] Shader loaded successfully. Program ID: " + std::to_string(shader->ID));
     }
+    
     Shaders[name] = shader;
     return shader;
 }
@@ -43,14 +46,17 @@ std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char* file, bool a
             return Textures[filePath];
         }
     }
+    
     Logger::Info("[ResourceManager::LoadTexture] Loading texture from file: " + filePath + " (name: " + name + ")");
     
+    // Load image data asynchronously.
     auto futureImageData = std::async(std::launch::async, [filePath, alpha]() -> FileUtils::ImageData {
         return FileUtils::LoadImageData(filePath, alpha);
     });
     FileUtils::ImageData imgData = futureImageData.get();
     
     std::shared_ptr<Texture2D> texture = std::make_shared<Texture2D>();
+    // Configure texture formats based on file name and alpha flag.
     if (filePath.find("baseColor") != std::string::npos) {
         if (alpha) {
             texture->Internal_Format = GL_SRGB_ALPHA;
@@ -70,11 +76,13 @@ std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char* file, bool a
     }
     
     texture->GenerateFromData(imgData, alpha);
+    
     if (texture->ID == 0) {
-        Logger::Error("[ResourceManager::LoadTexture] Texture " + filePath + " failed to load.");
+        Logger::Error("[ResourceManager::LoadTexture] Texture '" + filePath + "' failed to load.");
     } else {
         Logger::Info("[ResourceManager::LoadTexture] Texture loaded successfully. Texture ID: " + std::to_string(texture->ID));
     }
+    
     {
         std::lock_guard<std::mutex> lock(textureMutex);
         Textures[filePath] = texture;
@@ -89,12 +97,14 @@ std::shared_ptr<Texture2D> ResourceManager::GetTexture(std::string name) {
 std::shared_ptr<Model> ResourceManager::LoadModel(const char* file, std::string name) {
     std::string filePath = FileUtils::NormalizePath(file);
     Logger::Info("[ResourceManager::LoadModel] Loading model: " + filePath + " (name: " + name + ")");
+    
     std::shared_ptr<Model> model = std::make_shared<Model>(filePath);
     if (model->submeshes.empty()) {
-        Logger::Error("[ResourceManager::LoadModel] Model " + filePath + " did not load properly (empty submeshes).");
+        Logger::Error("[ResourceManager::LoadModel] Model '" + filePath + "' did not load properly (empty submeshes).");
     } else {
         Logger::Info("[ResourceManager::LoadModel] Model loaded successfully. Number of submeshes: " + std::to_string(model->submeshes.size()));
     }
+    
     Models[name] = model;
     return model;
 }
@@ -104,6 +114,8 @@ std::shared_ptr<Model> ResourceManager::GetModel(std::string name) {
 }
 
 void ResourceManager::Clear() {
+    Logger::Info("[ResourceManager::Clear] Clearing all loaded resources.");
+    
     for (auto iter : Shaders) {
         Logger::Info("[ResourceManager::Clear] Deleting shader: " + iter.first);
         glDeleteProgram(iter.second->ID);
@@ -112,10 +124,11 @@ void ResourceManager::Clear() {
         Logger::Info("[ResourceManager::Clear] Deleting texture: " + iter.first);
         glDeleteTextures(1, &iter.second->ID);
     }
-    // Los modelos se liberan automáticamente con shared_ptr.
+    // Models are automatically released using shared_ptr.
 }
 
 std::future<std::shared_ptr<Model>> ResourceManager::LoadModelAsync(const char* file, std::string name) {
+    Logger::Info("[ResourceManager::LoadModelAsync] Asynchronously loading model: " + std::string(file) + " (name: " + name + ")");
     return std::async(std::launch::async, [file, name]() -> std::shared_ptr<Model> {
         return ResourceManager::LoadModel(file, name);
     });

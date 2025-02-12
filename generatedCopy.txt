@@ -1,4 +1,30 @@
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\AudioModule.h
+------------------------------------------------------------
+#ifndef AUDIOMODULE_H
+#define AUDIOMODULE_H
+
+#include "Module.h"
+#include <iostream>
+
+class AudioModule : public Module {
+public:
+    virtual bool Init() override {
+        std::cout << "[Audio] Initialized." << std::endl;
+        // Inicialización del sistema de audio (OpenAL, FMOD, etc.)
+        return true;
+    }
+    virtual void Update(float dt) override {
+        std::cout << "[Audio] Updating (dt = " << dt << "s)." << std::endl;
+    }
+    virtual void Shutdown() override {
+        std::cout << "[Audio] Shutdown." << std::endl;
+    }
+};
+
+#endif // AUDIOMODULE_H
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Camera.h
 ------------------------------------------------------------
 #ifndef CAMERA_H
@@ -60,6 +86,99 @@ private:
 };
 
 #endif // CAMERA_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Engine.cpp
+------------------------------------------------------------
+#include "Engine.h"
+#include <iostream>
+
+Engine::Engine() : m_Running(false) {}
+
+Engine::~Engine() {
+    Shutdown();
+}
+
+void Engine::AddModule(std::shared_ptr<Module> module) {
+    m_Modules.push_back(module);
+}
+
+bool Engine::Init() {
+    for (auto &module : m_Modules) {
+        if (!module->Init()) {
+            std::cerr << "A module failed to initialize." << std::endl;
+            return false;
+        }
+    }
+    m_Running = true;
+    return true;
+}
+
+void Engine::Run() {
+    // Para este ejemplo usamos un dt fijo (~60 FPS)
+    float dt = 0.016f;
+    while (m_Running) {
+        for (auto &module : m_Modules) {
+            module->Update(dt);
+        }
+        // En un motor real se procesarían eventos, se actualizaría el tiempo, etc.
+        // Aquí para el ejemplo finalizamos el bucle después de una iteración.
+        m_Running = false;
+    }
+}
+
+void Engine::Shutdown() {
+    for (auto &module : m_Modules) {
+        module->Shutdown();
+    }
+    m_Modules.clear();
+    m_Running = false;
+}
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Engine.h
+------------------------------------------------------------
+#ifndef ENGINE_H
+#define ENGINE_H
+
+#include <vector>
+#include <memory>
+#include "Module.h"
+
+class Engine {
+public:
+    Engine();
+    ~Engine();
+
+    // Inicializa todos los módulos agregados.
+    bool Init();
+    // Ejecuta el bucle principal actualizando cada módulo.
+    void Run();
+    // Cierra y libera los módulos.
+    void Shutdown();
+
+    // Agrega un módulo al motor.
+    void AddModule(std::shared_ptr<Module> module);
+
+    // Permite obtener un módulo de un tipo específico.
+    template<typename T>
+    std::shared_ptr<T> GetModule();
+private:
+    bool m_Running;
+    std::vector<std::shared_ptr<Module>> m_Modules;
+};
+
+template<typename T>
+std::shared_ptr<T> Engine::GetModule() {
+    for (auto &module : m_Modules) {
+        auto casted = std::dynamic_pointer_cast<T>(module);
+        if (casted)
+            return casted;
+    }
+    return nullptr;
+}
+
+#endif // ENGINE_H
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\FileUtils.h
@@ -128,6 +247,32 @@ inline ImageData LoadImageData(const std::string& path, bool alpha) {
 #endif // FILEUTILS_H
 
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\InputModule.h
+------------------------------------------------------------
+#ifndef INPUTMODULE_H
+#define INPUTMODULE_H
+
+#include "Module.h"
+#include <iostream>
+
+class InputModule : public Module {
+public:
+    virtual bool Init() override {
+        std::cout << "[Input] Initialized." << std::endl;
+        // Inicialización del sistema de entrada (teclado, ratón, gamepad, etc.)
+        return true;
+    }
+    virtual void Update(float dt) override {
+        std::cout << "[Input] Updating (dt = " << dt << "s)." << std::endl;
+    }
+    virtual void Shutdown() override {
+        std::cout << "[Input] Shutdown." << std::endl;
+    }
+};
+
+#endif // INPUTMODULE_H
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Light.h
 ------------------------------------------------------------
 #ifndef LIGHT_H
@@ -145,25 +290,19 @@ enum class LightType : int {
     DIRECTIONAL = 2
 };
 
-// Estructura para almacenar la información de una luz, diseñada para cumplir con std140.
-// Se agregan rellenos (padding) para asegurar la alineación a 16 bytes.
+// Estructura para almacenar la información de una luz en formato std140,
+// usando vec4 para garantizar una alineación correcta (80 bytes por luz).
 struct Light {
-    int type;           // Se usará LightType convertido a int
-    glm::vec3 padding1; // Relleno para completar 16 bytes
-
-    glm::vec3 position;
-    float padding2;     // Relleno
-
-    glm::vec3 direction;
-    float padding3;     // Relleno
-
-    glm::vec3 color;
-    float intensity;    // Intensidad de la luz
-
-    // Propiedades para focos (spot lights)
-    float cutOff;       // Ángulo interno (coseno)
-    float outerCutOff;  // Ángulo externo (coseno)
-    glm::vec2 padding4; // Relleno para completar 16 bytes
+    // Almacena el tipo en la componente x; las componentes yzw se usan como padding.
+    glm::vec4 typeAndPadding;
+    // Posición de la luz: xyz y w se usa como padding.
+    glm::vec4 position;
+    // Dirección de la luz: xyz y w se usa como padding.
+    glm::vec4 direction;
+    // Color e intensidad: rgb = color, a = intensidad.
+    glm::vec4 colorAndIntensity;
+    // Parámetros para luces focales: x = cutOff, y = outerCutOff, z y w como padding.
+    glm::vec4 spotParams;
 };
 
 #endif // LIGHT_H
@@ -185,10 +324,10 @@ public:
     UniformBuffer lightUBO; // UBO para enviar la información de las luces
 
     LightManager() {
-        // Se asume que lightUBO genera el buffer al construirse.
+        // Se asume que el constructor de UniformBuffer genera el buffer.
     }
     
-    // Actualiza el UBO para que siempre tenga 10 entradas
+    // Actualiza el UBO para que siempre tenga 10 entradas.
     void UpdateUBO() {
         const int maxLights = 10;
         std::vector<Light> lightData(maxLights);
@@ -196,14 +335,12 @@ public:
             if (i < lights.size()) {
                 lightData[i] = lights[i];
             } else {
-                // Rellenar con una luz "vacía" (por ejemplo, con intensidad 0)
-                lightData[i].type = -1;  // Un valor negativo indica que no se usa
-                lightData[i].position = glm::vec3(0.0f);
-                lightData[i].direction = glm::vec3(0.0f);
-                lightData[i].color = glm::vec3(0.0f);
-                lightData[i].intensity = 0.0f;
-                lightData[i].cutOff = 0.0f;
-                lightData[i].outerCutOff = 0.0f;
+                // Rellenar con una luz "vacía" (se indica con tipo -1)
+                lightData[i].typeAndPadding = glm::vec4(-1, 0, 0, 0);
+                lightData[i].position = glm::vec4(0.0f);
+                lightData[i].direction = glm::vec4(0.0f);
+                lightData[i].colorAndIntensity = glm::vec4(0.0f);
+                lightData[i].spotParams = glm::vec4(0.0f);
             }
         }
         size_t dataSize = lightData.size() * sizeof(Light);
@@ -213,12 +350,12 @@ public:
         Logger::Info("[LightManager] UBO updated with " + std::to_string(lights.size()) + " lights.");
     }
     
-    // Agrega una luz
+    // Agrega una luz.
     void AddLight(const Light& light) {
         lights.push_back(light);
     }
     
-    // Limpia la lista de luces
+    // Limpia la lista de luces.
     void ClearLights() {
         lights.clear();
     }
@@ -333,7 +470,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include <iostream>
 #include "ResourceManager.h"
 #include "Model.h"
-#include "UniformBuffer.h"   // Ya no se utilizará para la luz, pero se mantiene para otros UBOs
+#include "UniformBuffer.h"   // Used for UBOs
 #include "Camera.h"
 #include "Logger.h"
 #include <glm/glm.hpp>
@@ -343,9 +480,16 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include <filesystem>
 #include <windows.h>
 
-// Inclusiones nuevas para el sistema de escenas
+// Scene and model node includes
 #include "Scene.h"
 #include "ModelNode.h"
+
+// Light and LightManager includes (ensure LightManager.cpp is compiled)
+#include "Light.h"
+#include "LightManager.h"
+
+// PlayerController include
+#include "PlayerController.h"
 
 // Global project root
 std::string gProjectRoot;
@@ -353,62 +497,43 @@ std::string gProjectRoot;
 std::string GetProjectRoot() {
     char buffer[MAX_PATH];
     if (GetModuleFileNameA(NULL, buffer, MAX_PATH) == 0) {
-        Logger::Error("[GetProjectRoot] Unable to get module file name.");
+        Logger::Error("GetProjectRoot: Unable to get module file name.");
         return "";
     }
     std::filesystem::path exePath(buffer);
     std::filesystem::path projectRoot = exePath.parent_path().parent_path().parent_path();
-    Logger::Info("[GetProjectRoot] Project root: " + projectRoot.string());
+    Logger::Info("GetProjectRoot: Project root is " + projectRoot.string());
     return projectRoot.string();
 }
 
-Camera camera;  // Instancia global de la cámara
+Camera camera;  // Global camera instance with its default position and orientation
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     glViewport(0, 0, width, height);
+    Logger::Debug("Framebuffer resized: width = " + std::to_string(width) + ", height = " + std::to_string(height));
 }
 
-void processInput(GLFWwindow *window) {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-    if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        camera.ProcessKeyboard('W', deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        camera.ProcessKeyboard('S', deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        camera.ProcessKeyboard('A', deltaTime);
-    if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        camera.ProcessKeyboard('D', deltaTime);
-}
-
+// For this test, the mouse callback is not used so that the camera remains fixed.
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    static bool firstMouse = true;
-    static float lastX = 1920.0f / 2.0f, lastY = 1080.0f / 2.0f;
-    if (firstMouse) {
-        lastX = static_cast<float>(xpos);
-        lastY = static_cast<float>(ypos);
-        firstMouse = false;
-    }
-    float xoffset = static_cast<float>(xpos) - lastX;
-    float yoffset = lastY - static_cast<float>(ypos);
-    lastX = static_cast<float>(xpos);
-    lastY = static_cast<float>(ypos);
-    camera.ProcessMouseMovement(xoffset, yoffset);
+    // Camera remains fixed; no mouse updates.
 }
 
 int main() {
-    // Configuración del Logger
     Logger::SetLogFile("Toxic.log");
     Logger::SetLogLevel(LogLevel::DEBUG);
     
+    Logger::Info("Main: Starting application.");
     gProjectRoot = GetProjectRoot();
-    if (gProjectRoot.empty()) return -1;
+    if (gProjectRoot.empty()) {
+        Logger::Error("Main: Project root is empty.");
+        return -1;
+    }
     
     if (!glfwInit()) {
-        Logger::Error("[Main] Failed to initialize GLFW.");
+        Logger::Error("Main: Failed to initialize GLFW.");
         return -1;
     }
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -417,17 +542,18 @@ int main() {
     
     GLFWwindow* window = glfwCreateWindow(1920, 1080, "Toxic in 3D - PBR", nullptr, nullptr);
     if (!window) {
-        Logger::Error("[Main] Failed to create GLFW window.");
+        Logger::Error("Main: Failed to create GLFW window.");
         glfwTerminate();
         return -1;
     }
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
+    // Do not set the mouse callback so that the camera stays fixed
+    // glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-        Logger::Error("[Main] Failed to initialize GLAD.");
+        Logger::Error("Main: Failed to initialize GLAD.");
         return -1;
     }
     glEnable(GL_DEPTH_TEST);
@@ -435,7 +561,7 @@ int main() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     
-    // --- Carga de recursos ---
+    Logger::Info("Main: Loading resources...");
     std::string vertexShaderPath = gProjectRoot + "/shaders/pbr_vertex.glsl";
     std::string fragmentShaderPath = gProjectRoot + "/shaders/pbr_fragment.glsl";
     std::string albedoPath = gProjectRoot + "/assets/car/textures/Material_294_baseColor.png";
@@ -483,98 +609,102 @@ int main() {
     
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f/1080.0f, 0.1f, 100.0f);
     glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-    // --- Fin carga de recursos ---
+    Logger::Info("Main: Resources loaded successfully.");
     
-    // --- Integración del sistema de escenas ---
+    Logger::Info("Main: Setting up scene...");
     std::shared_ptr<Scene> scene = std::make_shared<Scene>();
     std::shared_ptr<ModelNode> carNode = std::make_shared<ModelNode>(carModel);
+    // Restore the original transform that displays the model correctly
     carNode->localTransform = glm::mat4(1.0f);
     carNode->localTransform = glm::translate(carNode->localTransform, glm::vec3(0.0f, -1.0f, 0.0f));
     carNode->localTransform = glm::rotate(carNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     carNode->localTransform = glm::scale(carNode->localTransform, glm::vec3(0.01f));
     scene->GetRoot()->AddChild(carNode);
-    // --- Fin integración de escena ---
+    Logger::Info("Main: Scene setup completed.");
     
-    // --- Configuración de luces ---
-    const int NUM_POINT_LIGHTS = 2;
-    const int NUM_SPOT_LIGHTS = 2;
-    glm::vec3 pointLightPositions[NUM_POINT_LIGHTS] = {
-        glm::vec3(5.0f, 5.0f, 5.0f),
-        glm::vec3(-5.0f, 5.0f, 5.0f)
-    };
-    glm::vec3 pointLightColors[NUM_POINT_LIGHTS] = {
-        glm::vec3(1.0f, 0.5f, 0.5f), // tono rojizo
-        glm::vec3(0.5f, 0.5f, 1.0f)  // tono azulado
-    };
-
-    glm::vec3 spotLightPositions[NUM_SPOT_LIGHTS] = {
-        glm::vec3(0.0f, 5.0f, 0.0f),
-        glm::vec3(0.0f, 5.0f, 5.0f)
-    };
-    glm::vec3 spotLightDirections[NUM_SPOT_LIGHTS] = {
-        glm::vec3(0.0f, -1.0f, 0.0f),
-        glm::vec3(0.0f, -1.0f, -1.0f)
-    };
-    glm::vec3 spotLightColors[NUM_SPOT_LIGHTS] = {
-        glm::vec3(0.5f, 1.0f, 0.5f), // tono verdoso
-        glm::vec3(1.0f, 1.0f, 0.5f)  // tono amarillento
-    };
-    float spotLightCutOff[NUM_SPOT_LIGHTS] = {
-        glm::cos(glm::radians(12.5f)),
-        glm::cos(glm::radians(15.0f))
-    };
-    float spotLightOuterCutOff[NUM_SPOT_LIGHTS] = {
-        glm::cos(glm::radians(17.5f)),
-        glm::cos(glm::radians(20.0f))
-    };
-    glm::vec3 ambientLightColor = glm::vec3(0.2f);
-    // --- Fin configuración de luces ---
+    Logger::Info("Main: Creating PlayerController to move the model...");
+    PlayerController playerController(carNode.get(), &camera);
     
-    // Bucle principal
+    Logger::Info("Main: Configuring lights using LightManager...");
+    LightManager lightManager;
+    {
+        Light pointLight1 = {};
+        pointLight1.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        pointLight1.position = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
+        pointLight1.direction = glm::vec4(0.0f);
+        pointLight1.colorAndIntensity = glm::vec4(1.0f, 0.5f, 0.5f, 1.0f);
+        pointLight1.spotParams = glm::vec4(0.0f);
+        lightManager.AddLight(pointLight1);
+    
+        Light pointLight2 = {};
+        pointLight2.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        pointLight2.position = glm::vec4(-5.0f, 5.0f, 5.0f, 1.0f);
+        pointLight2.direction = glm::vec4(0.0f);
+        pointLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        pointLight2.spotParams = glm::vec4(0.0f);
+        lightManager.AddLight(pointLight2);
+    }
+    {
+        Light spotLight1 = {};
+        spotLight1.typeAndPadding = glm::vec4(1, 0, 0, 0);
+        spotLight1.position = glm::vec4(0.0f, 5.0f, 0.0f, 1.0f);
+        spotLight1.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
+        spotLight1.colorAndIntensity = glm::vec4(0.5f, 1.0f, 0.5f, 1.0f);
+        spotLight1.spotParams = glm::vec4(glm::cos(glm::radians(12.5f)),
+                                           glm::cos(glm::radians(17.5f)),
+                                           0.0f, 0.0f);
+        lightManager.AddLight(spotLight1);
+    
+        Light spotLight2 = {};
+        spotLight2.typeAndPadding = glm::vec4(1, 0, 0, 0);
+        spotLight2.position = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
+        spotLight2.direction = glm::vec4(0.0f, -1.0f, -1.0f, 0.0f);
+        spotLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 0.5f, 1.0f);
+        spotLight2.spotParams = glm::vec4(glm::cos(glm::radians(15.0f)),
+                                           glm::cos(glm::radians(20.0f)),
+                                           0.0f, 0.0f);
+        lightManager.AddLight(spotLight2);
+    }
+    unsigned int lightBlockIndex = glGetUniformBlockIndex(pbrShader->ID, "LightBlock");
+    if (lightBlockIndex == GL_INVALID_INDEX) {
+        Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
+    } else {
+        glUniformBlockBinding(pbrShader->ID, lightBlockIndex, 1);
+        Logger::Info("Main: LightBlock bound to binding point 1.");
+    }
+    
+    Logger::Info("Main: Entering main loop.");
     while (!glfwWindowShouldClose(window)) {
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-        processInput(window);
+        
+        glfwPollEvents();
+        // Update the model's transformation using the PlayerController
+        playerController.Update(deltaTime);
         
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
+        // Use the fixed camera view matrix.
         glm::mat4 view = camera.GetViewMatrix();
         pbrShader->Use();
         glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
         
-        // Actualizar las uniformes de las luces
-        for (int i = 0; i < NUM_POINT_LIGHTS; i++) {
-            std::string uniformName = "pointLights[" + std::to_string(i) + "].position";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(pointLightPositions[i]));
-            uniformName = "pointLights[" + std::to_string(i) + "].color";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(pointLightColors[i]));
-        }
-        for (int i = 0; i < NUM_SPOT_LIGHTS; i++) {
-            std::string uniformName = "spotLights[" + std::to_string(i) + "].position";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightPositions[i]));
-            uniformName = "spotLights[" + std::to_string(i) + "].direction";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightDirections[i]));
-            uniformName = "spotLights[" + std::to_string(i) + "].color";
-            glUniform3fv(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), 1, glm::value_ptr(spotLightColors[i]));
-            uniformName = "spotLights[" + std::to_string(i) + "].cutOff";
-            glUniform1f(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), spotLightCutOff[i]);
-            uniformName = "spotLights[" + std::to_string(i) + "].outerCutOff";
-            glUniform1f(glGetUniformLocation(pbrShader->ID, uniformName.c_str()), spotLightOuterCutOff[i]);
-        }
+        lightManager.UpdateUBO();
+        lightManager.lightUBO.BindToPoint(1);
+        
+        glm::vec3 ambientLightColor = glm::vec3(0.2f);
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientLightColor));
         
-        // Actualizar la jerarquía de nodos (calcula las transformaciones globales)
         scene->Update();
-        // Renderizar la escena: cada nodo envía su matriz "model" y dibuja su contenido.
         scene->Render(*pbrShader);
         
         glfwSwapBuffers(window);
-        glfwPollEvents();
     }
     
+    Logger::Info("Main: Exiting main loop. Cleaning up resources.");
     ResourceManager::Clear();
     glfwTerminate();
     return 0;
@@ -1030,6 +1160,194 @@ public:
 #endif // MODELNODE_H
 
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Module.h
+------------------------------------------------------------
+#ifndef MODULE_H
+#define MODULE_H
+
+class Module {
+public:
+    virtual ~Module() {}
+    // Inicializa el módulo. Retorna true si todo ha ido bien.
+    virtual bool Init() = 0;
+    // Actualiza el módulo (por ejemplo, cada frame). dt es el tiempo transcurrido.
+    virtual void Update(float dt) = 0;
+    // Libera recursos y cierra el módulo.
+    virtual void Shutdown() = 0;
+};
+
+#endif // MODULE_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\PhysicsModule.h
+------------------------------------------------------------
+#ifndef PHYSICSMODULE_H
+#define PHYSICSMODULE_H
+
+#include "Module.h"
+#include <iostream>
+
+class PhysicsModule : public Module {
+public:
+    virtual bool Init() override {
+        std::cout << "[Physics] Initialized." << std::endl;
+        // Inicialización del motor de física (por ejemplo, Bullet, PhysX, etc.)
+        return true;
+    }
+    virtual void Update(float dt) override {
+        std::cout << "[Physics] Updating (dt = " << dt << "s)." << std::endl;
+    }
+    virtual void Shutdown() override {
+        std::cout << "[Physics] Shutdown." << std::endl;
+    }
+};
+
+#endif // PHYSICSMODULE_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\PlayerController.cpp
+------------------------------------------------------------
+#include "PlayerController.h"
+#include <GLFW/glfw3.h>
+#include <glm/gtc/matrix_transform.hpp>
+
+// Constructor: store the base transform and initial position.
+PlayerController::PlayerController(SceneNode* player, Camera* camera)
+    : m_Player(player), m_Camera(camera), m_MoveSpeed(5.0f),
+      m_RotateSpeed(glm::radians(90.0f)), m_PlayerYaw(0.0f)
+{
+    m_BaseTransform = m_Player->localTransform;
+    m_PlayerPosition = glm::vec3(m_BaseTransform[3]);
+    Logger::Info("PlayerController: Initialized with base position (" +
+                 std::to_string(m_PlayerPosition.x) + ", " +
+                 std::to_string(m_PlayerPosition.y) + ", " +
+                 std::to_string(m_PlayerPosition.z) + ").");
+}
+
+void PlayerController::Update(float dt) {
+    GLFWwindow* window = glfwGetCurrentContext();
+    if (!window) {
+        Logger::Error("PlayerController::Update: No current GLFW window.");
+        return;
+    }
+
+    // Check keyboard input for movement and rotation.
+    bool moveForward  = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
+    bool moveBackward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
+    bool turnLeft     = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
+    bool turnRight    = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+
+    Logger::Debug("PlayerController::Update: Input - W:" + std::to_string(moveForward) +
+                  " S:" + std::to_string(moveBackward) +
+                  " A:" + std::to_string(turnLeft) +
+                  " D:" + std::to_string(turnRight));
+
+    // Update yaw based on left/right input.
+    if (turnLeft)
+        m_PlayerYaw += m_RotateSpeed * dt;
+    if (turnRight)
+        m_PlayerYaw -= m_RotateSpeed * dt;
+
+    Logger::Debug("PlayerController::Update: Updated yaw = " + std::to_string(m_PlayerYaw));
+
+    // Build the dynamic rotation matrix from the yaw.
+    glm::mat4 R = glm::rotate(glm::mat4(1.0f), m_PlayerYaw, glm::vec3(0, 1, 0));
+    // Calculate the forward vector by applying the rotation to (0,0,1).
+    glm::mat3 dynamicRotation = glm::mat3(R);
+    glm::vec3 forward = dynamicRotation * glm::vec3(0, 0, 1);
+    forward = glm::normalize(forward);
+
+    Logger::Debug("PlayerController::Update: Forward vector = (" +
+                  std::to_string(forward.x) + ", " +
+                  std::to_string(forward.y) + ", " +
+                  std::to_string(forward.z) + ")");
+
+    // Update the player's position based on forward/backward input.
+    if (moveForward)
+        m_PlayerPosition += forward * m_MoveSpeed * dt;
+    if (moveBackward)
+        m_PlayerPosition -= forward * m_MoveSpeed * dt;
+
+    Logger::Debug("PlayerController::Update: Updated position = (" +
+                  std::to_string(m_PlayerPosition.x) + ", " +
+                  std::to_string(m_PlayerPosition.y) + ", " +
+                  std::to_string(m_PlayerPosition.z) + ")");
+
+    // Build the dynamic translation matrix.
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), m_PlayerPosition);
+    // Update the player's transformation: translation * rotation * base transform.
+    m_Player->localTransform = T * R * m_BaseTransform;
+    Logger::Info("PlayerController::Update: Player transform updated.");
+    
+    // For this test, the camera remains fixed.
+}
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\PlayerController.h
+------------------------------------------------------------
+#ifndef PLAYERCONTROLLER_H
+#define PLAYERCONTROLLER_H
+
+#include <glm/glm.hpp>
+#include "SceneNode.h"
+#include "Camera.h"
+
+// The PlayerController handles movement and rotation of the model (car) based on keyboard input.
+class PlayerController {
+public:
+    // Constructor: takes a pointer to the player node (car model) and a pointer to the camera.
+    // In this test, the camera will remain fixed.
+    PlayerController(SceneNode* player, Camera* camera);
+
+    // Updates the model's transformation based on input. Called every frame.
+    void Update(float dt);
+
+private:
+    SceneNode* m_Player;  // Pointer to the player node (car model)
+    Camera* m_Camera;     // Pointer to the camera (not updated in this test)
+
+    float m_MoveSpeed;    // Movement speed (units per second)
+    float m_RotateSpeed;  // Rotation speed (radians per second)
+
+    // Current state of the player.
+    glm::vec3 m_PlayerPosition; // Position updated from input.
+    float m_PlayerYaw;          // Yaw (rotation around the Y-axis) updated from input.
+
+    // The base transformation (the original transform) of the model as set in main.
+    glm::mat4 m_BaseTransform;
+};
+
+#endif // PLAYERCONTROLLER_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\RendererModule.h
+------------------------------------------------------------
+#ifndef RENDERERMODULE_H
+#define RENDERERMODULE_H
+
+#include "Module.h"
+#include <iostream>
+#include <glm/glm.hpp>
+
+class RendererModule : public Module {
+public:
+    virtual bool Init() override {
+        std::cout << "[Renderer] Initialized." << std::endl;
+        // Aquí se crearían la ventana, contexto OpenGL, etc.
+        return true;
+    }
+    virtual void Update(float dt) override {
+        // Aquí se realizaría el renderizado de la escena.
+        std::cout << "[Renderer] Updating (dt = " << dt << "s)." << std::endl;
+    }
+    virtual void Shutdown() override {
+        std::cout << "[Renderer] Shutdown." << std::endl;
+    }
+};
+
+#endif // RENDERERMODULE_H
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ResourceManager.cpp
 ------------------------------------------------------------
 #include "ResourceManager.h"
@@ -1282,6 +1600,32 @@ protected:
 };
 
 #endif // SCENENODE_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ScriptingModule.h
+------------------------------------------------------------
+#ifndef SCRIPTINGMODULE_H
+#define SCRIPTINGMODULE_H
+
+#include "Module.h"
+#include <iostream>
+
+class ScriptingModule : public Module {
+public:
+    virtual bool Init() override {
+        std::cout << "[Scripting] Initialized." << std::endl;
+        // Aquí se integraría un lenguaje de scripting (Lua, Python, etc.)
+        return true;
+    }
+    virtual void Update(float dt) override {
+        std::cout << "[Scripting] Updating (dt = " << dt << "s)." << std::endl;
+    }
+    virtual void Shutdown() override {
+        std::cout << "[Scripting] Shutdown." << std::endl;
+    }
+};
+
+#endif // SCRIPTINGMODULE_H
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Shader.h
@@ -1594,6 +1938,32 @@ public:
 #endif // TEXTURE2D_H
 
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\UIModule.h
+------------------------------------------------------------
+#ifndef UIMODULE_H
+#define UIMODULE_H
+
+#include "Module.h"
+#include <iostream>
+
+class UIModule : public Module {
+public:
+    virtual bool Init() override {
+        std::cout << "[UI] Initialized." << std::endl;
+        // Inicialización del sistema de interfaz de usuario (menus, HUD, etc.)
+        return true;
+    }
+    virtual void Update(float dt) override {
+        std::cout << "[UI] Updating (dt = " << dt << "s)." << std::endl;
+    }
+    virtual void Shutdown() override {
+        std::cout << "[UI] Shutdown." << std::endl;
+    }
+};
+
+#endif // UIMODULE_H
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\UniformBuffer.h
 ------------------------------------------------------------
 #ifndef UNIFORMBUFFER_H
@@ -1631,34 +2001,6 @@ public:
 #endif // UNIFORMBUFFER_H
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\debug_albedo_fragment.glsl
-------------------------------------------------------------
-// debug_uv_fragment.glsl
-#version 330 core
-in vec2 TexCoords;
-out vec4 FragColor;
-
-void main(){
-    FragColor = vec4(TexCoords, 0.0, 1.0);
-}
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\ground_fragment.glsl
-------------------------------------------------------------
-#version 330 core
-
-in vec2 TexCoords;
-out vec4 FragColor;
-
-uniform sampler2D albedoMap;
-
-void main() {
-    vec4 texColor = texture(albedoMap, TexCoords);
-    // Se asume que la textura tiene el canal alfa correcto para transparencia
-    FragColor = texColor;
-}
-
-------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\pbr_fragment.glsl
 ------------------------------------------------------------
 #version 330 core
@@ -1672,44 +2014,37 @@ out vec4 FragColor;
 uniform sampler2D albedoMap;           // Se espera que esté en sRGB
 uniform sampler2D metallicRoughnessMap;  // En rojo: metallic, en verde: roughness
 uniform sampler2D normalMap;             // Normal map
-uniform bool useMaps;                    
+uniform bool useMaps;
 uniform vec3 camPos;
 
-struct PointLight {
-    vec3 position;
-    vec3 color;
-};
-
-struct SpotLight {
-    vec3 position;
-    vec3 direction;
-    vec3 color;
-    float cutOff;
-    float outerCutOff;
-};
-
-#define NUM_POINT_LIGHTS 2
-#define NUM_SPOT_LIGHTS 2
-
-uniform PointLight pointLights[NUM_POINT_LIGHTS];
-uniform SpotLight spotLights[NUM_SPOT_LIGHTS];
 uniform vec3 ambientColor;
 
 const float PI = 3.14159265359;
+
+// Estructura para la luz (debe coincidir con la definida en C++)
+struct Light {
+    vec4 typeAndPadding;   // x: tipo (int), yzw: padding
+    vec4 position;         // xyz: posición, w: padding
+    vec4 direction;        // xyz: dirección, w: padding
+    vec4 colorAndIntensity; // rgb: color, a: intensidad
+    vec4 spotParams;       // x: cutOff, y: outerCutOff, z,w: padding
+};
+
+layout(std140) uniform LightBlock {
+    Light lights[10];
+};
 
 vec3 fresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness) {
-    float a      = roughness * roughness;
-    float a2     = a * a;
-    float NdotH  = max(dot(N, H), 0.0);
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = max(dot(N, H), 0.0);
     float NdotH2 = NdotH * NdotH;
-    
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
     denom = PI * denom * denom;
-    
     return a2 / max(denom, 0.001);
 }
 
@@ -1728,7 +2063,6 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 void main(){
-    // Muestreamos los mapas
     vec4 albedoSample = texture(albedoMap, TexCoords);
     vec3 albedoColor = albedoSample.rgb;
     float alpha = albedoSample.a;
@@ -1737,23 +2071,27 @@ void main(){
     float roughness = useMaps ? texture(metallicRoughnessMap, TexCoords).g : 1.0;
     vec3 tangentNormal = useMaps ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
     tangentNormal = tangentNormal * 2.0 - 1.0;
+    // Invertir el canal verde de la normal map (común en algunos assets)
+    tangentNormal.y = -tangentNormal.y;
     vec3 N = normalize(TBN * tangentNormal);
     
-    // Calcular F0: para dieléctricos (0.04) o basados en el albedo si es metálico.
     vec3 F0 = mix(vec3(0.04), albedoColor, metallic);
     vec3 V = normalize(camPos - FragPos);
     
     vec3 result = vec3(0.0);
     
-    // Contribución de las luces puntuales
-    for (int i = 0; i < NUM_POINT_LIGHTS; ++i) {
-        vec3 L = normalize(pointLights[i].position - FragPos);
+    for (int i = 0; i < 10; ++i) {
+        // Si el tipo es -1, la luz no se usa.
+        if (int(lights[i].typeAndPadding.x) == -1) continue;
+        
+        vec3 lightPos = lights[i].position.xyz;
+        vec3 L = normalize(lightPos - FragPos);
         vec3 H = normalize(V + L);
         float NdotL = max(dot(N, L), 0.0);
         
         float NDF = DistributionGGX(N, H, roughness);
-        float G   = GeometrySmith(N, V, L, roughness);
-        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
+        float G = GeometrySmith(N, V, L, roughness);
+        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
         
         vec3 numerator = NDF * G * F;
         float denominator = 4.0 * max(dot(N, V), 0.0) * NdotL + 0.001;
@@ -1763,36 +2101,21 @@ void main(){
         vec3 kD = vec3(1.0) - kS;
         kD *= (1.0 - metallic);
         
-        result += (kD * albedoColor / PI + specular) * pointLights[i].color * NdotL;
+        int lightType = int(lights[i].typeAndPadding.x);
+        if(lightType == 0) { // Luz puntual
+            result += (kD * albedoColor / PI + specular) *
+                      lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL;
+        } else if(lightType == 1) { // Luz focal (spot)
+            float cutOff = lights[i].spotParams.x;
+            float outerCutOff = lights[i].spotParams.y;
+            float theta = dot(L, normalize(-lights[i].direction.xyz));
+            float epsilon = cutOff - outerCutOff;
+            float intensity = clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
+            result += intensity * ((kD * albedoColor / PI + specular) *
+                      lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL);
+        }
     }
     
-    // Contribución de las luces focales (spotlights)
-    for (int i = 0; i < NUM_SPOT_LIGHTS; ++i) {
-        vec3 L = normalize(spotLights[i].position - FragPos);
-        vec3 H = normalize(V + L);
-        float NdotL = max(dot(N, L), 0.0);
-        
-        // Calcular intensidad basada en el ángulo del foco
-        float theta = dot(L, normalize(-spotLights[i].direction));
-        float epsilon = spotLights[i].cutOff - spotLights[i].outerCutOff;
-        float intensity = clamp((theta - spotLights[i].outerCutOff) / epsilon, 0.0, 1.0);
-        
-        float NDF = DistributionGGX(N, H, roughness);
-        float G   = GeometrySmith(N, V, L, roughness);
-        vec3 F    = fresnelSchlick(max(dot(H, V), 0.0), F0);
-        
-        vec3 numerator = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * NdotL + 0.001;
-        vec3 specular = numerator / denominator;
-        
-        vec3 kS = F;
-        vec3 kD = vec3(1.0) - kS;
-        kD *= (1.0 - metallic);
-        
-        result += intensity * ((kD * albedoColor / PI + specular) * spotLights[i].color * NdotL);
-    }
-    
-    // Agregar iluminación ambiental
     result += ambientColor * albedoColor;
     
     FragColor = vec4(result, alpha);
@@ -1821,12 +2144,14 @@ void main()
     FragPos = vec3(worldPos);
     TexCoords = aTexCoords;
     
-    // Transformamos la normal y el tangente al espacio mundo
-    vec3 N = normalize(mat3(transpose(inverse(model))) * aNormal);
-    vec3 T = normalize(mat3(model) * aTangent);
-    // Re-ortogonalizamos el tangente respecto a la normal
+    // Calcular la matriz normal para transformar tanto la normal como el tangente
+    mat3 normalMatrix = mat3(transpose(inverse(model)));
+    
+    vec3 N = normalize(normalMatrix * aNormal);
+    vec3 T = normalize(normalMatrix * aTangent);
+    // Re-ortogonalizar el tangente respecto a la normal
     T = normalize(T - N * dot(N, T));
-    vec3 B = normalize(cross(N, T));
+    vec3 B = cross(N, T);
     
     TBN = mat3(T, B, N);
     

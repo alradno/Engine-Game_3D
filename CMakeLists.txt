@@ -20,6 +20,7 @@ add_executable(Toxic
     ${CMAKE_SOURCE_DIR}/src/stb_image.cpp
     ${CMAKE_SOURCE_DIR}/src/Model.cpp
     ${CMAKE_SOURCE_DIR}/src/Material.cpp
+    ${CMAKE_SOURCE_DIR}/src/PlayerController.cpp
 )
 
 # Especifica los directorios de inclusión para Toxic

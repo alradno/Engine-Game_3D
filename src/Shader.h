@@ -6,20 +6,23 @@
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include "Logger.h"  // Incluir el Logger
+#include "Logger.h"  // Include Logger for detailed logging
 
 class Shader {
 public:
     unsigned int ID;
+    
+    // Constructor initializes the shader ID to 0.
     Shader() : ID(0) { }
     
+    // Compiles the shader from given vertex and fragment shader file paths.
     void Compile(const char* vertexPath, const char* fragmentPath) {
         std::string vertexCode;
         std::string fragmentCode;
         std::ifstream vShaderFile;
         std::ifstream fShaderFile;
         
-        // Habilitar excepciones
+        // Enable exceptions on ifstream objects for robust error handling.
         vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
         try {
@@ -27,18 +30,22 @@ public:
             vShaderFile.open(vertexPath);
             Logger::Debug("[Shader::Compile] Opening fragment shader file: " + std::string(fragmentPath));
             fShaderFile.open(fragmentPath);
+            
             std::stringstream vShaderStream, fShaderStream;
             vShaderStream << vShaderFile.rdbuf();
             fShaderStream << fShaderFile.rdbuf();
             vertexCode = vShaderStream.str();
             fragmentCode = fShaderStream.str();
+            
             Logger::Debug("[Shader::Compile] Vertex shader code length: " + std::to_string(vertexCode.size()) + " bytes");
             Logger::Debug("[Shader::Compile] Fragment shader code length: " + std::to_string(fragmentCode.size()) + " bytes");
+            
             vShaderFile.close();
             fShaderFile.close();
         } catch (std::ifstream::failure&) {
-            Logger::Error("[Shader::Compile] ERROR: Shader file not read successfully: " + std::string(vertexPath) + " or " + std::string(fragmentPath));
+            Logger::Error("[Shader::Compile] ERROR: Failed to read shader file: " + std::string(vertexPath) + " or " + std::string(fragmentPath));
         }
+        
         const char* vShaderCode = vertexCode.c_str();
         const char* fShaderCode = fragmentCode.c_str();
         
@@ -46,7 +53,7 @@ public:
         int success;
         char infoLog[512];
         
-        // Compilar shader de vértices
+        // Compile vertex shader.
         vertex = glCreateShader(GL_VERTEX_SHADER);
         glShaderSource(vertex, 1, &vShaderCode, NULL);
         glCompileShader(vertex);
@@ -58,7 +65,7 @@ public:
             Logger::Info("[Shader::Compile] Vertex shader compiled successfully.");
         }
         
-        // Compilar shader de fragmentos
+        // Compile fragment shader.
         fragment = glCreateShader(GL_FRAGMENT_SHADER);
         glShaderSource(fragment, 1, &fShaderCode, NULL);
         glCompileShader(fragment);
@@ -70,7 +77,7 @@ public:
             Logger::Info("[Shader::Compile] Fragment shader compiled successfully.");
         }
         
-        // Crear programa shader y vincular
+        // Create shader program, attach shaders, and link the program.
         ID = glCreateProgram();
         glAttachShader(ID, vertex);
         glAttachShader(ID, fragment);
@@ -83,10 +90,12 @@ public:
             Logger::Info("[Shader::Compile] Shader program linked successfully. Program ID: " + std::to_string(ID));
         }
         
+        // Once linked, the individual shader objects can be deleted.
         glDeleteShader(vertex);
         glDeleteShader(fragment);
     }
     
+    // Activates the shader program.
     void Use() {
         glUseProgram(ID);
     }

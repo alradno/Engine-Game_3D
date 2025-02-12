@@ -16,21 +16,23 @@ enum class LogLevel {
 
 class Logger {
 public:
-    // Establece el nivel mínimo de mensajes a imprimir.
+    // Sets the minimum log level to print messages.
     static void SetLogLevel(LogLevel level) {
         instance().minLevel = level;
     }
     
-    // Habilita la escritura en un archivo además de la consola.
+    // Enables writing to a file in addition to the console.
+    // Updated to use truncation mode so that the log file is cleared each time the program starts.
     static void SetLogFile(const std::string& filename) {
         std::lock_guard<std::mutex> lock(instance().mutex_);
-        instance().logFile.open(filename, std::ios::out | std::ios::app);
+        // Open the file with truncation mode instead of append mode.
+        instance().logFile.open(filename, std::ios::out | std::ios::trunc);
         if (!instance().logFile.is_open()) {
             std::cerr << "[Logger] ERROR: Could not open log file: " << filename << std::endl;
         }
     }
     
-    // Funciones de logging para cada nivel.
+    // Logging functions for each level.
     static void Debug(const std::string& msg) {
         instance().log(LogLevel::DEBUG, msg);
     }
@@ -54,13 +56,13 @@ private:
     
     Logger() { }
     
-    // Obtiene la instancia singleton.
+    // Gets the singleton instance.
     static Logger& instance() {
         static Logger logger;
         return logger;
     }
     
-    // Función interna para formatear y escribir el mensaje.
+    // Internal function to format and write the message.
     void log(LogLevel level, const std::string& msg) {
         if (level < minLevel)
             return;
@@ -78,13 +80,13 @@ private:
         oss << "[" << levelStr << "] " << msg << "\n";
         std::string finalMsg = oss.str();
         
-        // Escribir a la consola
+        // Write to the console.
         if (level == LogLevel::ERROR)
             std::cerr << finalMsg;
         else
             std::cout << finalMsg;
         
-        // Escribir al archivo si está abierto.
+        // Write to the file if it is open.
         if (logFile.is_open()) {
             logFile << finalMsg;
             logFile.flush();

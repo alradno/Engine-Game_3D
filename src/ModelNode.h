@@ -9,26 +9,40 @@
 #include <glad/glad.h>
 #include "Shader.h"
 
-/// Nodo de escena que encapsula un modelo 3D.
+// Scene node that encapsulates a 3D model.
 class ModelNode : public SceneNode {
 public:
+    // Pointer to the 3D model associated with this node.
     std::shared_ptr<Model> model;
     
+    // Constructor: Initializes the ModelNode with the given model.
     ModelNode(const std::shared_ptr<Model>& m) : model(m) {
         Logger::Info("[ModelNode] ModelNode created.");
     }
     
-    /// Renderiza el nodo enviando la transformación global al shader y luego dibujando el modelo.
+    // Renders the node by sending the global transformation to the shader
+    // and then drawing the model.
     virtual void Render(const Shader &shader) override {
         Logger::Debug("[ModelNode] Rendering model node.");
         if (model) {
-            // Enviar la transformación global al shader mediante la uniforme "model"
-            glUniformMatrix4fv(glGetUniformLocation(shader.ID, "model"), 1, GL_FALSE, glm::value_ptr(globalTransform));
-            model->Draw();  // Se asume que el shader actual ya está en uso y las uniformes globales se han actualizado.
+            // Retrieve the location of the "model" uniform in the shader.
+            GLint modelLoc = glGetUniformLocation(shader.ID, "model");
+            if (modelLoc == -1) {
+                Logger::Warning("[ModelNode] Shader uniform 'model' not found.");
+            } else {
+                // Send the global transformation matrix to the shader uniform "model".
+                glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(globalTransform));
+                Logger::Debug("[ModelNode] Global transformation matrix sent to shader uniform 'model'.");
+            }
+            
+            // Draw the model. It is assumed that the shader is already in use
+            // and that all necessary global uniforms have been updated.
+            model->Draw();
         } else {
             Logger::Warning("[ModelNode] No model to render.");
         }
-        // Renderizar los hijos (si existen)
+        
+        // Render any child nodes.
         SceneNode::Render(shader);
     }
 };

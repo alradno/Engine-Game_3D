@@ -5,31 +5,40 @@
 #include <string>
 #include "Logger.h"
 
+// Converts an Assimp aiMatrix4x4 to a glm::mat4.
 glm::mat4 aiMatrix4x4ToGlm(const aiMatrix4x4 &from) {
+    Logger::Debug("[ModelLoader::aiMatrix4x4ToGlm] Converting aiMatrix4x4 to glm::mat4.");
     glm::mat4 to;
     to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
     to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
     to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
     to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
+    Logger::Debug("[ModelLoader::aiMatrix4x4ToGlm] Conversion complete.");
     return to;
 }
 
+// Processes an Assimp node recursively. This function extracts vertices and indices from each mesh
+// in the node, and optionally calculates tangents if they are missing.
 void processNode(aiNode* node, const aiScene* scene,
                  std::vector<Vertex>& vertices,
                  std::vector<unsigned int>& indices,
                  const glm::mat4& parentTransform)
 {
     Logger::Debug("[ModelLoader::processNode] Processing node: " + std::string(node->mName.C_Str()));
+    
+    // Start with the parent transformation.
     glm::mat4 nodeTransform = parentTransform;
-    // Uncomment the following line if you want to apply the node's transformation:
+    // Uncomment the following line to apply the node's transformation:
     // nodeTransform = parentTransform * aiMatrix4x4ToGlm(node->mTransformation);
     
+    // Iterate through all meshes referenced by this node.
     for (unsigned int i = 0; i < node->mNumMeshes; i++) {
         aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
         unsigned int vertexOffset = vertices.size();
         Logger::Debug("[ModelLoader::processNode] Processing mesh " + std::to_string(i) +
                       " with " + std::to_string(mesh->mNumVertices) + " vertices.");
         
+        // Process each vertex of the mesh.
         for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
             Vertex vertex;
             vertex.Position = glm::vec3(mesh->mVertices[j].x,
@@ -58,6 +67,7 @@ void processNode(aiNode* node, const aiScene* scene,
             vertices.push_back(vertex);
         }
         
+        // Process the mesh faces (indices).
         for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
             aiFace face = mesh->mFaces[j];
             for (unsigned int k = 0; k < face.mNumIndices; k++) {
@@ -68,7 +78,7 @@ void processNode(aiNode* node, const aiScene* scene,
         Logger::Debug("[ModelLoader::processNode] Mesh " + std::to_string(i) +
                       " has " + std::to_string(mesh->mNumFaces) + " faces.");
         
-        // Optional tangent calculation…
+        // If tangents are missing and texture coordinates are available, calculate tangents manually.
         if (!mesh->HasTangentsAndBitangents() && mesh->HasTextureCoords(0)) {
             std::vector<glm::vec3> tempTangents(mesh->mNumVertices, glm::vec3(0.0f));
             for (unsigned int j = 0; j < mesh->mNumFaces; j++){
@@ -104,6 +114,7 @@ void processNode(aiNode* node, const aiScene* scene,
             for (unsigned int j = 0; j < mesh->mNumVertices; j++){
                 vertices[vertexOffset + j].Tangent = glm::normalize(tempTangents[j]);
             }
+            Logger::Debug("[ModelLoader::processNode] Manually calculated tangents for mesh lacking them.");
         }
     }
     
