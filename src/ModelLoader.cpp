@@ -34,7 +34,7 @@ void processNode(aiNode* node, const aiScene* scene,
     // Iterate through all meshes referenced by this node.
     for (unsigned int i = 0; i < node->mNumMeshes; i++) {
         aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-        unsigned int vertexOffset = vertices.size();
+        size_t vertexOffset = vertices.size();
         Logger::Debug("[ModelLoader::processNode] Processing mesh " + std::to_string(i) +
                       " with " + std::to_string(mesh->mNumVertices) + " vertices.");
         
@@ -71,7 +71,8 @@ void processNode(aiNode* node, const aiScene* scene,
         for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
             aiFace face = mesh->mFaces[j];
             for (unsigned int k = 0; k < face.mNumIndices; k++) {
-                indices.push_back(vertexOffset + face.mIndices[k]);
+                // Using size_t for vertexOffset, explicitly cast the sum to unsigned int.
+                indices.push_back(static_cast<unsigned int>(vertexOffset + face.mIndices[k]));
             }
         }
         
@@ -83,7 +84,7 @@ void processNode(aiNode* node, const aiScene* scene,
             std::vector<glm::vec3> tempTangents(mesh->mNumVertices, glm::vec3(0.0f));
             for (unsigned int j = 0; j < mesh->mNumFaces; j++){
                 aiFace face = mesh->mFaces[j];
-                if(face.mNumIndices < 3)
+                if (face.mNumIndices < 3)
                     continue;
                 unsigned int i0 = face.mIndices[0];
                 unsigned int i1 = face.mIndices[1];

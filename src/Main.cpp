@@ -207,6 +207,13 @@ int main() {
         lastFrame = currentFrame;
         
         glfwPollEvents();
+
+        // --- Comprobación para cerrar la ventana al pulsar Esc ---
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+            glfwSetWindowShouldClose(window, true);
+        }
+        // ------------------------------------------------------------
+
         // Update the model's transformation using the PlayerController
         playerController.Update(deltaTime);
         
