@@ -91,42 +91,23 @@ int main() {
     Logger::Info("Main: Loading resources...");
     std::string vertexShaderPath = gProjectRoot + "/shaders/pbr_vertex.glsl";
     std::string fragmentShaderPath = gProjectRoot + "/shaders/pbr_fragment.glsl";
-    std::string albedoPath = gProjectRoot + "/assets/car/textures/Material_294_baseColor.png";
-    std::string albedo2Path = gProjectRoot + "/assets/car/textures/Material_295_baseColor.png";
-    std::string albedo3Path = gProjectRoot + "/assets/car/textures/Material_316_baseColor.png";
-    std::string mrPath = gProjectRoot + "/assets/car/textures/Material_294_metallicRoughness.png";
-    std::string normalPath = gProjectRoot + "/assets/car/textures/Material_294_normal.png";
     std::string modelPath = gProjectRoot + "/assets/car/scene.gltf";
-    
+    std::string porscheModelPath = gProjectRoot + "/assets/porsche/scene.gltf";
+
     auto shaderFuture = std::async(std::launch::deferred, [vertexShaderPath, fragmentShaderPath]() {
         return ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "pbr");
-    });
-    auto albedoFuture = std::async(std::launch::deferred, [albedoPath]() {
-        return ResourceManager::LoadTexture(albedoPath.c_str(), true, "car_albedo");
-    });
-    auto albedo2Future = std::async(std::launch::deferred, [albedo2Path]() {
-        return ResourceManager::LoadTexture(albedo2Path.c_str(), true, "car_albedo2");
-    });
-    auto albedo3Future = std::async(std::launch::deferred, [albedo3Path]() {
-        return ResourceManager::LoadTexture(albedo3Path.c_str(), true, "car_albedo3");
-    });
-    auto mrFuture = std::async(std::launch::deferred, [mrPath]() {
-        return ResourceManager::LoadTexture(mrPath.c_str(), false, "car_mr");
-    });
-    auto normFuture = std::async(std::launch::deferred, [normalPath]() {
-        return ResourceManager::LoadTexture(normalPath.c_str(), false, "car_normal");
     });
     auto modelFuture = std::async(std::launch::deferred, [modelPath]() {
         return ResourceManager::LoadModel(modelPath.c_str(), "car");
     });
-    
+    auto porscheFuture = std::async(std::launch::deferred, [porscheModelPath]() {
+        return ResourceManager::LoadModel(porscheModelPath.c_str(), "porsche");
+    });
+
     auto pbrShader = shaderFuture.get();
-    auto albedo = albedoFuture.get();
-    auto albedo2 = albedo2Future.get();
-    auto albedo3 = albedo3Future.get();
-    auto mrMap = mrFuture.get();
-    auto normMap = normFuture.get();
     auto carModel = modelFuture.get();
+    auto porscheModel = porscheFuture.get();
+
     
     pbrShader->Use();
     glUniform1i(glGetUniformLocation(pbrShader->ID, "albedoMap"), 0);
@@ -141,12 +122,20 @@ int main() {
     Logger::Info("Main: Setting up scene...");
     std::shared_ptr<Scene> scene = std::make_shared<Scene>();
     std::shared_ptr<ModelNode> carNode = std::make_shared<ModelNode>(carModel);
+    std::shared_ptr<ModelNode> porscheNode = std::make_shared<ModelNode>(porscheModel);
 
     carNode->localTransform = glm::mat4(1.0f);
     carNode->localTransform = glm::translate(carNode->localTransform, glm::vec3(0.0f, -1.0f, 0.0f));
     carNode->localTransform = glm::rotate(carNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     carNode->localTransform = glm::scale(carNode->localTransform, glm::vec3(0.01f));
+
+    porscheNode->localTransform = glm::mat4(1.0f);
+    porscheNode->localTransform = glm::translate(porscheNode->localTransform, glm::vec3(0.0f, 0.0f, 5.0f));
+    porscheNode->localTransform = glm::rotate(porscheNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    porscheNode->localTransform = glm::scale(porscheNode->localTransform, glm::vec3(1.0f));
+
     scene->GetRoot()->AddChild(carNode);
+    scene->GetRoot()->AddChild(porscheNode);
     Logger::Info("Main: Scene setup completed.");
     
     Logger::Info("Main: Creating PlayerController to move the model...");
