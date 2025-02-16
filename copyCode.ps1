@@ -10,7 +10,7 @@ if (Test-Path $outputFile) {
 }
 
 # Array con los nombres de las carpetas a procesar (se asume que están en el mismo directorio que el script)
-$folders = @("src", "shaders")
+$folders = @("include", "src", "shaders")
 
 foreach ($folder in $folders) {
     # Construimos la ruta completa de la carpeta

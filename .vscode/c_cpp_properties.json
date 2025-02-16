@@ -3,12 +3,9 @@
     {
       "name": "Win64",
       "includePath": [
-        "${workspaceFolder}/src",
-        "${workspaceFolder}/libs/glad/include",
-        "${workspaceFolder}/libs/assimp/include",
-        "${workspaceFolder}/libs/glfw/include",
-        "${workspaceFolder}/libs/stb/include",
-        "${workspaceFolder}/libs/glm/include"
+        "${workspaceFolder}/src/**",
+        "${workspaceFolder}/libs/**",
+        "${workspaceFolder}/include/**"
       ],
       "defines": [
         "_DEBUG",

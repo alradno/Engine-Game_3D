@@ -31,6 +31,7 @@ target_include_directories(Toxic PRIVATE
     ${CMAKE_SOURCE_DIR}/libs/glfw/include
     ${CMAKE_SOURCE_DIR}/libs/stb/include
     ${CMAKE_SOURCE_DIR}/libs/glm/include
+    ${CMAKE_SOURCE_DIR}/include
 )
 
 # Link the necessary libraries for Toxic.

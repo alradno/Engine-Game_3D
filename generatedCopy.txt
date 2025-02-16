@@ -1,57 +1,5 @@
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\AudioModule.h
-------------------------------------------------------------
-#ifndef AUDIOMODULE_H
-#define AUDIOMODULE_H
-
-#include "Module.h"
-#include "Logger.h"  // Use Logger for detailed logging instead of standard output streams
-
-// AudioModule is responsible for managing the audio subsystem.
-// It handles initialization, per-frame updates, and proper shutdown of audio resources.
-class AudioModule : public Module {
-public:
-    // Initializes the audio system.
-    // Returns true if the initialization is successful.
-    virtual bool Init() override {
-        Logger::Info("[AudioModule] Starting initialization process for the audio system.");
-        // Initialize the audio system (e.g., using libraries like OpenAL, FMOD, etc.)
-        Logger::Debug("[AudioModule] Attempting to allocate and initialize audio resources.");
-
-        // Simulate initialization logic.
-        bool success = true; // Replace with actual audio initialization code.
-
-        if (success) {
-            Logger::Info("[AudioModule] Audio system successfully initialized.");
-        } else {
-            Logger::Error("[AudioModule] Audio system initialization failed. Check audio device and library configuration.");
-        }
-
-        return success;
-    }
-
-    // Updates the audio system.
-    // 'dt' represents the time delta (in seconds) since the last update call.
-    virtual void Update(float dt) override {
-        // Log a detailed debug message including the delta time.
-        Logger::Debug("[AudioModule] Updating audio system with delta time: " + std::to_string(dt) + " seconds.");
-        // Update audio processes such as sound playback, volume adjustments, and real-time effects.
-        // Additional debug logs can be inserted here to trace individual audio event updates if needed.
-    }
-
-    // Shuts down the audio system and releases any allocated resources.
-    virtual void Shutdown() override {
-        Logger::Info("[AudioModule] Commencing shutdown sequence for the audio system.");
-        // Release audio resources, buffers, and close any open audio devices.
-        Logger::Debug("[AudioModule] Releasing allocated audio buffers and cleaning up hardware resources.");
-        Logger::Info("[AudioModule] Audio system shutdown complete.");
-    }
-};
-
-#endif // AUDIOMODULE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Camera.h
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Camera.h
 ------------------------------------------------------------
 #ifndef CAMERA_H
 #define CAMERA_H
@@ -158,130 +106,7 @@ private:
 #endif // CAMERA_H
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Engine.cpp
-------------------------------------------------------------
-#include "Engine.h"
-#include "Logger.h"  // Use Logger for detailed logging instead of iostream
-
-Engine::Engine() : m_Running(false) {
-    Logger::Info("[Engine] Engine instance created.");
-}
-
-Engine::~Engine() {
-    Logger::Info("[Engine] Engine destructor called. Initiating shutdown sequence.");
-    Shutdown();
-}
-
-// Adds a new module to the engine's module list.
-void Engine::AddModule(std::shared_ptr<Module> module) {
-    m_Modules.push_back(module);
-    Logger::Debug("[Engine] Module added to the engine.");
-}
-
-// Initializes all modules. Returns true if all modules are successfully initialized.
-bool Engine::Init() {
-    Logger::Info("[Engine] Starting initialization of engine modules.");
-    for (auto &module : m_Modules) {
-        if (!module->Init()) {
-            Logger::Error("[Engine] A module failed to initialize. Aborting engine initialization.");
-            return false;
-        }
-    }
-    m_Running = true;
-    Logger::Info("[Engine] All modules initialized successfully. Engine is now running.");
-    return true;
-}
-
-// Runs the main engine loop. For this example, a fixed delta time (dt) is used (~60 FPS).
-void Engine::Run() {
-    float dt = 0.016f; // Fixed delta time for ~60 FPS.
-    Logger::Info("[Engine] Entering main loop with fixed dt = " + std::to_string(dt) + " seconds.");
-    while (m_Running) {
-        // Update all modules with the fixed delta time.
-        for (auto &module : m_Modules) {
-            module->Update(dt);
-            Logger::Debug("[Engine] Updated a module with dt = " + std::to_string(dt) + " seconds.");
-        }
-        // In a real engine, events would be processed and time updated here.
-        // For this example, we exit the loop after one iteration.
-        m_Running = false;
-        Logger::Info("[Engine] Main loop iteration complete. Exiting main loop.");
-    }
-}
-
-// Shuts down all modules and clears the module list.
-void Engine::Shutdown() {
-    Logger::Info("[Engine] Shutting down engine modules.");
-    for (auto &module : m_Modules) {
-        module->Shutdown();
-        Logger::Debug("[Engine] A module has been shut down successfully.");
-    }
-    m_Modules.clear();
-    m_Running = false;
-    Logger::Info("[Engine] Engine shutdown complete. All modules have been cleared.");
-}
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Engine.h
-------------------------------------------------------------
-#ifndef ENGINE_H
-#define ENGINE_H
-
-#include <vector>
-#include <memory>
-#include "Module.h"
-#include "Logger.h"  // Include Logger to provide detailed logging messages
-
-// The Engine class is responsible for managing the lifecycle of various modules.
-// It supports initializing, running, and shutting down the modules.
-class Engine {
-public:
-    // Constructor: Creates an instance of the engine.
-    Engine();
-    // Destructor: Ensures that the engine shuts down properly.
-    ~Engine();
-
-    // Initializes all added modules.
-    // Returns true if all modules are successfully initialized.
-    bool Init();
-    // Runs the main loop by updating each module.
-    void Run();
-    // Shuts down and releases all modules.
-    void Shutdown();
-
-    // Adds a module to the engine.
-    void AddModule(std::shared_ptr<Module> module);
-
-    // Retrieves a module of a specific type.
-    // This method searches for a module that can be cast to type T.
-    template<typename T>
-    std::shared_ptr<T> GetModule();
-    
-private:
-    bool m_Running;  // Indicates whether the engine is currently running.
-    std::vector<std::shared_ptr<Module>> m_Modules;  // List of modules managed by the engine.
-};
-
-// Template method to retrieve a module of a specific type T.
-// It logs the search process and returns the first matching module.
-template<typename T>
-std::shared_ptr<T> Engine::GetModule() {
-    Logger::Debug("[Engine::GetModule] Attempting to retrieve module of the specified type.");
-    for (auto &module : m_Modules) {
-        auto casted = std::dynamic_pointer_cast<T>(module);
-        if (casted) {
-            Logger::Debug("[Engine::GetModule] Module found and successfully casted to the required type.");
-            return casted;
-        }
-    }
-    Logger::Warning("[Engine::GetModule] No module of the specified type was found.");
-    return nullptr;
-}
-
-#endif // ENGINE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\FileUtils.h
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\FileUtils.h
 ------------------------------------------------------------
 #ifndef FILEUTILS_H
 #define FILEUTILS_H
@@ -355,73 +180,33 @@ inline ImageData LoadImageData(const std::string& path, bool alpha) {
 #endif // FILEUTILS_H
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\InputModule.h
-------------------------------------------------------------
-#ifndef INPUTMODULE_H
-#define INPUTMODULE_H
-
-#include "Module.h"
-#include "Logger.h"  // Use Logger for detailed logging instead of standard output streams
-
-class InputModule : public Module {
-public:
-    // Initializes the input system (keyboard, mouse, gamepad, etc.).
-    virtual bool Init() override {
-        Logger::Info("[InputModule] Starting initialization of the input system.");
-        // Initialize the input system (e.g., keyboard, mouse, gamepad, etc.).
-        Logger::Info("[InputModule] Input system successfully initialized.");
-        return true;
-    }
-    
-    // Updates the input system.
-    // 'dt' represents the time delta (in seconds) since the last update.
-    virtual void Update(float dt) override {
-        Logger::Debug("[InputModule] Updating input system with delta time: " + std::to_string(dt) + " seconds.");
-    }
-    
-    // Shuts down the input system and releases any allocated resources.
-    virtual void Shutdown() override {
-        Logger::Info("[InputModule] Shutting down input system.");
-    }
-};
-
-#endif // INPUTMODULE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Light.h
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Light.h
 ------------------------------------------------------------
 #ifndef LIGHT_H
 #define LIGHT_H
 
 #include <glm/glm.hpp>
-#include "Logger.h"   // Include Logger for detailed logging output
+#include "Logger.h"
 #include <string>
 
-// Define light types using an integer:
-// 0: Point light
-// 1: Spot light
-// 2: Directional light (optional)
+// Enumeración de tipos de luz
 enum class LightType : int {
-    POINT = 0,
-    SPOT = 1,
-    DIRECTIONAL = 2
+    DIRECTIONAL = 0,
+    POINT = 1,
+    SPOT = 2,
+    AMBIENT = 3,
+    EMISSIVE = 4
 };
 
-// Structure to store the information of a light in std140 layout,
-// using vec4 for proper alignment (80 bytes per light).
-struct Light {
-    // Stores the light type in the x component; y, z, w are used as padding.
-    glm::vec4 typeAndPadding;
-    // Position of the light: xyz represents the position and w is used as padding.
-    glm::vec4 position;
-    // Direction of the light: xyz represents the direction and w is used as padding.
-    glm::vec4 direction;
-    // Color and intensity: rgb represents the color, and a represents the intensity.
-    glm::vec4 colorAndIntensity;
-    // Parameters for spot lights: x = cutOff, y = outerCutOff, z and w are used as padding.
-    glm::vec4 spotParams;
+// Declaramos la estructura con alignas(16) para cumplir std140
+struct alignas(16) Light {
+    // typeAndPadding.x contendrá el valor del tipo (almacenado como float)
+    glm::vec4 typeAndPadding;    // x: LightType, yzw: padding
+    glm::vec4 position;          // xyz: posición, w: padding
+    glm::vec4 direction;         // xyz: dirección, w: padding
+    glm::vec4 colorAndIntensity; // rgb: color, a: intensidad
+    glm::vec4 spotParams;        // x: cutOff, y: outerCutOff, z y w: padding
 
-    // Logs detailed information about the light's properties.
     inline void LogLightDetails() const {
         Logger::Debug("[Light] Logging light details:");
         Logger::Debug("  Type (stored in x component): " + std::to_string(typeAndPadding.x));
@@ -438,16 +223,15 @@ struct Light {
                       std::to_string(colorAndIntensity.y) + ", " +
                       std::to_string(colorAndIntensity.z) + ")");
         Logger::Debug("  Intensity (stored in w component): " + std::to_string(colorAndIntensity.w));
-        Logger::Debug("  Spot Params: (cutOff: " +
-                      std::to_string(spotParams.x) + ", outerCutOff: " +
-                      std::to_string(spotParams.y) + ")");
+        Logger::Debug("  Spot Params: (cutOff: " + std::to_string(spotParams.x) +
+                      ", outerCutOff: " + std::to_string(spotParams.y) + ")");
     }
 };
 
 #endif // LIGHT_H
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\LightManager.h
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\LightManager.h
 ------------------------------------------------------------
 #ifndef LIGHTMANAGER_H
 #define LIGHTMANAGER_H
@@ -513,7 +297,7 @@ public:
 #endif // LIGHTMANAGER_H
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Logger.h
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Logger.h
 ------------------------------------------------------------
 #ifndef LOGGER_H
 #define LOGGER_H
@@ -614,14 +398,817 @@ private:
 #endif // LOGGER_H
 
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Material.h
+------------------------------------------------------------
+#ifndef MATERIAL_H
+#define MATERIAL_H
+
+#include <memory>
+#include <map>
+#include <glm/glm.hpp>
+#include "Texture2D.h"
+#include "Shader.h"
+
+// Enumeración de los tipos de textura soportados.
+enum class TextureType {
+    ALBEDO,
+    ROUGHNESS,
+    METALNESS,
+    NORMAL,
+    HEIGHT,
+    AO,
+    SPECULAR,
+    EMISSIVE,
+    GLOSSINESS,
+    OPACITY
+};
+
+class Material {
+public:
+    // Mapa que asocia cada tipo de textura a un objeto Texture2D.
+    std::map<TextureType, std::shared_ptr<Texture2D>> textures;
+    
+    // Color base extraído del material (por ejemplo, del baseColorFactor en glTF).
+    // Se usará en el shader cuando no exista una textura de albedo.
+    glm::vec4 baseColor = glm::vec4(1.0f);
+
+    // Aplica el material al shader actual: envía el color base y enlaza las texturas.
+    void Apply(Shader &shader);
+};
+
+#endif // MATERIAL_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Model.h
+------------------------------------------------------------
+#ifndef MODEL_H
+#define MODEL_H
+
+#include <string>
+#include <vector>
+#include "ModelLoader.h"
+#include "Submesh.h"
+#include "Material.h"
+#include <assimp/scene.h>
+#include <glm/glm.hpp>
+#include "ResourceManager.h"
+#include <filesystem>
+#include "Logger.h"
+
+// Función auxiliar para obtener la ruta de una textura desde un aiMaterial.
+// Si se busca BASE_COLOR y no se encuentra, se intenta con DIFFUSE.
+inline std::string GetTexturePath(aiMaterial* material, aiTextureType type, const std::string& baseDir) {
+    aiString str;
+    // Intentamos obtener la textura usando el tipo solicitado.
+    if (material->GetTexture(type, 0, &str) != AI_SUCCESS) {
+        // Si estamos buscando la textura de albedo, también intentamos con DIFFUSE.
+        if (type == aiTextureType_BASE_COLOR) {
+            if (material->GetTexture(aiTextureType_DIFFUSE, 0, &str) != AI_SUCCESS)
+                return "";
+        } else {
+            return "";
+        }
+    }
+    
+    std::string texturePath(str.C_Str());
+    Logger::Debug("[GetTexturePath] Texture path from glTF: " + texturePath);
+    
+    std::filesystem::path fsPath(texturePath);
+    // Si la ruta no es absoluta, la combinamos con el directorio base
+    if (!fsPath.is_absolute()) {
+        texturePath = baseDir + "/" + texturePath;
+        Logger::Debug("[GetTexturePath] Combined with base directory: " + texturePath);
+    }
+    
+    return texturePath;
+}
+
+class Model {
+public:
+    std::vector<Submesh> submeshes;
+    
+    // Carga el modelo desde el archivo especificado.
+    Model(const std::string &path) {
+        Logger::Info("[Model::Model] Loading model from path: " + path);
+        loadModel(path);
+    }
+    
+    // Dibuja el modelo (cada submesh).
+    void Draw();
+    
+private:
+    // Función que procesa la carga del modelo usando Assimp.
+    void loadModel(const std::string &path);
+};
+
+#endif // MODEL_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ModelLoader.h
+------------------------------------------------------------
+#ifndef MODELLOADER_H
+#define MODELLOADER_H
+
+#include <glm/glm.hpp>
+#include <vector>
+#include <assimp/scene.h>
+#include "Logger.h"
+
+// Structure for storing vertex data (required for PBR shading; tangent is essential for normal mapping).
+struct Vertex {
+    glm::vec3 Position;   // The vertex position in 3D space.
+    glm::vec3 Normal;     // The normal vector used for lighting calculations.
+    glm::vec2 TexCoords;  // Texture coordinates for mapping textures.
+    glm::vec3 Tangent;    // Tangent vector for correct normal mapping.
+};
+
+// Recursive function to process nodes in an Assimp scene graph.
+// This function extracts vertices and indices from each mesh and applies the parent transform.
+// Detailed debug logs are emitted during processing using Logger.
+void processNode(aiNode* node, const aiScene* scene,
+                 std::vector<Vertex>& vertices,
+                 std::vector<unsigned int>& indices,
+                 const glm::mat4& parentTransform);
+
+#endif // MODELLOADER_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ModelNode.h
+------------------------------------------------------------
+#ifndef MODELNODE_H
+#define MODELNODE_H
+
+#include "SceneNode.h"
+#include "Model.h"
+#include "Logger.h"
+#include <memory>
+#include <glm/gtc/type_ptr.hpp>
+#include <glad/glad.h>
+#include "Shader.h"
+
+// Scene node that encapsulates a 3D model.
+class ModelNode : public SceneNode {
+public:
+    // Pointer to the 3D model associated with this node.
+    std::shared_ptr<Model> model;
+    
+    // Constructor: Initializes the ModelNode with the given model.
+    ModelNode(const std::shared_ptr<Model>& m) : model(m) {
+        Logger::Info("[ModelNode] ModelNode created.");
+    }
+    
+    // Renders the node by sending the global transformation to the shader
+    // and then drawing the model.
+    virtual void Render(const Shader &shader) override {
+        Logger::Debug("[ModelNode] Rendering model node.");
+        if (model) {
+            // Retrieve the location of the "model" uniform in the shader.
+            GLint modelLoc = glGetUniformLocation(shader.ID, "model");
+            if (modelLoc == -1) {
+                Logger::Warning("[ModelNode] Shader uniform 'model' not found.");
+            } else {
+                // Send the global transformation matrix to the shader uniform "model".
+                glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(globalTransform));
+                Logger::Debug("[ModelNode] Global transformation matrix sent to shader uniform 'model'.");
+            }
+            
+            // Draw the model. It is assumed that the shader is already in use
+            // and that all necessary global uniforms have been updated.
+            model->Draw();
+        } else {
+            Logger::Warning("[ModelNode] No model to render.");
+        }
+        
+        // Render any child nodes.
+        SceneNode::Render(shader);
+    }
+};
+
+#endif // MODELNODE_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\PlayerController.h
+------------------------------------------------------------
+#ifndef PLAYERCONTROLLER_H
+#define PLAYERCONTROLLER_H
+
+#include <glm/glm.hpp>
+#include "SceneNode.h"
+#include "Camera.h"
+
+// The PlayerController class handles keyboard input to move and rotate the model (vehicle)
+// and automatically updates the camera to keep the model framed in the shot. The camera's
+// position is set using a fixed offset relative to the model's position, regardless of the model's rotation.
+class PlayerController {
+public:
+    // Constructor: takes a pointer to the player node (vehicle model) and a pointer to the camera.
+    // It initializes movement speeds, stores the model's base transform, and sets a default camera offset.
+    PlayerController(SceneNode* player, Camera* camera);
+
+    // Update is called every frame. It processes keyboard input to move and rotate the model,
+    // then updates the camera's position and orientation so that the model remains centered.
+    void Update(float dt);
+
+private:
+    SceneNode* m_Player;   // Pointer to the player node (vehicle model)
+    Camera* m_Camera;      // Pointer to the camera
+
+    float m_MoveSpeed;     // Movement speed (units per second)
+    float m_RotateSpeed;   // Rotation speed (radians per second)
+
+    glm::vec3 m_PlayerPosition; // The current position of the model, updated via input.
+    float m_PlayerYaw;          // The current yaw (rotation around Y-axis), updated via input.
+
+    glm::mat4 m_BaseTransform;  // The original transform of the model as set in main.
+
+    // A fixed camera offset relative to the model's position. This offset is NOT rotated
+    // by the model's rotation, so that the camera remains in a fixed position relative to the world.
+    glm::vec3 m_CameraOffset;
+};
+
+#endif // PLAYERCONTROLLER_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ResourceManager.h
+------------------------------------------------------------
+#ifndef RESOURCEMANAGER_H
+#define RESOURCEMANAGER_H
+
+#include <map>
+#include <string>
+#include <memory>
+#include <future>
+#include "Shader.h"
+#include "Texture2D.h"
+
+// Forward declaration to avoid circular dependency.
+class Model;
+
+// The ResourceManager class is responsible for loading, caching, and providing access to various resources
+// such as shaders, textures, and models. This avoids redundant loading and improves performance.
+// Detailed logging is performed in the corresponding source file to trace resource management events.
+class ResourceManager {
+public:
+    // Loads a shader from the specified vertex and fragment shader files, and stores it under the given name.
+    // Returns a shared pointer to the loaded Shader.
+    static std::shared_ptr<Shader> LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name);
+    
+    // Retrieves a previously loaded shader by its name.
+    static std::shared_ptr<Shader> GetShader(std::string name);
+    
+    // Loads a texture from a file. If 'alpha' is true, the texture is loaded with an alpha channel.
+    // The texture is stored under the provided name.
+    static std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, std::string name);
+    
+    // Retrieves a previously loaded texture by its name.
+    static std::shared_ptr<Texture2D> GetTexture(std::string name);
+    
+    // Loads a 3D model from a file and stores it under the specified name.
+    static std::shared_ptr<Model> LoadModel(const char* file, std::string name);
+    
+    // Retrieves a previously loaded model by its name.
+    static std::shared_ptr<Model> GetModel(std::string name);
+    
+    // Clears all loaded resources (shaders, textures, and models). Note that models are automatically released via shared_ptr.
+    static void Clear();
+    
+    // Asynchronously loads a 3D model from a file. Returns a future that holds a shared pointer to the loaded Model.
+    static std::future<std::shared_ptr<Model>> LoadModelAsync(const char* file, std::string name);
+    
+private:
+    // Private constructor to prevent instantiation.
+    ResourceManager() { }
+    
+    // Static maps for caching loaded resources.
+    static std::map<std::string, std::shared_ptr<Shader>> Shaders;
+    static std::map<std::string, std::shared_ptr<Texture2D>> Textures;
+    static std::map<std::string, std::shared_ptr<Model>> Models;
+};
+
+#endif // RESOURCEMANAGER_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Scene.h
+------------------------------------------------------------
+#ifndef SCENE_H
+#define SCENE_H
+
+#include "SceneNode.h"
+#include "Shader.h"
+#include "Logger.h"
+#include <memory>
+
+/// Class representing the complete scene.
+class Scene {
+public:
+    // Constructor: Creates a scene with an empty root node.
+    Scene() {
+        root = std::make_shared<SceneNode>();
+        Logger::Info("[Scene] Scene created with an empty root node.");
+    }
+    
+    // Updates the scene by calling Update() on the root node.
+    void Update() {
+        Logger::Debug("[Scene] Updating scene...");
+        root->Update();
+        Logger::Debug("[Scene] Scene update completed.");
+    }
+    
+    // Renders the scene by invoking Render() on the root node with the provided shader.
+    void Render(const Shader &shader) {
+        Logger::Debug("[Scene] Rendering scene using the provided shader...");
+        root->Render(shader);
+        Logger::Debug("[Scene] Scene render completed.");
+    }
+    
+    // Returns the root node of the scene.
+    std::shared_ptr<SceneNode> GetRoot() {
+        Logger::Debug("[Scene] Retrieving root node.");
+        return root;
+    }
+    
+private:
+    std::shared_ptr<SceneNode> root; // Root node of the scene graph.
+};
+
+#endif // SCENE_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\SceneNode.h
+------------------------------------------------------------
+#ifndef SCENENODE_H
+#define SCENENODE_H
+
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <vector>
+#include <memory>
+#include "Logger.h"
+#include "Shader.h"  // Ensure to include the Shader header
+
+/// Base class for scene nodes.
+class SceneNode {
+public:
+    glm::mat4 localTransform;  // Local transformation matrix.
+    glm::mat4 globalTransform; // Global transformation matrix computed recursively.
+
+    // Constructor: Initializes both local and global transforms to identity.
+    SceneNode() 
+        : localTransform(1.0f), globalTransform(1.0f) { 
+        Logger::Debug("[SceneNode] SceneNode created with identity transforms.");
+    }
+
+    virtual ~SceneNode() { }
+
+    // Adds a child node to this scene node.
+    void AddChild(const std::shared_ptr<SceneNode>& child) {
+        children.push_back(child);
+        Logger::Debug("[SceneNode] Child added to scene node. Total children: " + std::to_string(children.size()));
+    }
+
+    /// Recursively updates the global transformation based on the parent's transform.
+    /// @param parentTransform The transformation matrix from the parent node.
+    virtual void Update(const glm::mat4& parentTransform = glm::mat4(1.0f)) {
+        globalTransform = parentTransform * localTransform;
+        Logger::Debug("[SceneNode::Update] Global transform updated.");
+        for (auto& child : children) {
+            child->Update(globalTransform);
+        }
+    }
+
+    /// Renders this node and all its child nodes.
+    /// @param shader The shader used for rendering.
+    virtual void Render(const Shader &shader) {
+        Logger::Debug("[SceneNode::Render] Rendering node with " + std::to_string(children.size()) + " children.");
+        for (auto& child : children) {
+            child->Render(shader);
+        }
+    }
+
+protected:
+    std::vector<std::shared_ptr<SceneNode>> children; // List of child nodes.
+};
+
+#endif // SCENENODE_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Shader.h
+------------------------------------------------------------
+#ifndef SHADER_H
+#define SHADER_H
+
+#include <glad/glad.h>
+#include <string>
+#include <iostream>
+#include <fstream>
+#include <sstream>
+#include "Logger.h"  // Include Logger for detailed logging
+
+class Shader {
+public:
+    unsigned int ID;
+    
+    // Constructor initializes the shader ID to 0.
+    Shader() : ID(0) { }
+    
+    // Compiles the shader from given vertex and fragment shader file paths.
+    void Compile(const char* vertexPath, const char* fragmentPath) {
+        std::string vertexCode;
+        std::string fragmentCode;
+        std::ifstream vShaderFile;
+        std::ifstream fShaderFile;
+        
+        // Enable exceptions on ifstream objects for robust error handling.
+        vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        try {
+            Logger::Debug("[Shader::Compile] Opening vertex shader file: " + std::string(vertexPath));
+            vShaderFile.open(vertexPath);
+            Logger::Debug("[Shader::Compile] Opening fragment shader file: " + std::string(fragmentPath));
+            fShaderFile.open(fragmentPath);
+            
+            std::stringstream vShaderStream, fShaderStream;
+            vShaderStream << vShaderFile.rdbuf();
+            fShaderStream << fShaderFile.rdbuf();
+            vertexCode = vShaderStream.str();
+            fragmentCode = fShaderStream.str();
+            
+            Logger::Debug("[Shader::Compile] Vertex shader code length: " + std::to_string(vertexCode.size()) + " bytes");
+            Logger::Debug("[Shader::Compile] Fragment shader code length: " + std::to_string(fragmentCode.size()) + " bytes");
+            
+            vShaderFile.close();
+            fShaderFile.close();
+        } catch (std::ifstream::failure&) {
+            Logger::Error("[Shader::Compile] ERROR: Failed to read shader file: " + std::string(vertexPath) + " or " + std::string(fragmentPath));
+        }
+        
+        const char* vShaderCode = vertexCode.c_str();
+        const char* fShaderCode = fragmentCode.c_str();
+        
+        unsigned int vertex, fragment;
+        int success;
+        char infoLog[512];
+        
+        // Compile vertex shader.
+        vertex = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertex, 1, &vShaderCode, NULL);
+        glCompileShader(vertex);
+        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(vertex, 512, NULL, infoLog);
+            Logger::Error(std::string("[Shader::Compile] ERROR: Vertex shader compilation failed\n") + infoLog);
+        } else {
+            Logger::Info("[Shader::Compile] Vertex shader compiled successfully.");
+        }
+        
+        // Compile fragment shader.
+        fragment = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment, 1, &fShaderCode, NULL);
+        glCompileShader(fragment);
+        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(fragment, 512, NULL, infoLog);
+            Logger::Error(std::string("[Shader::Compile] ERROR: Fragment shader compilation failed\n") + infoLog);
+        } else {
+            Logger::Info("[Shader::Compile] Fragment shader compiled successfully.");
+        }
+        
+        // Create shader program, attach shaders, and link the program.
+        ID = glCreateProgram();
+        glAttachShader(ID, vertex);
+        glAttachShader(ID, fragment);
+        glLinkProgram(ID);
+        glGetProgramiv(ID, GL_LINK_STATUS, &success);
+        if (!success) {
+            glGetProgramInfoLog(ID, 512, NULL, infoLog);
+            Logger::Error(std::string("[Shader::Compile] ERROR: Shader program linking failed\n") + infoLog);
+        } else {
+            Logger::Info("[Shader::Compile] Shader program linked successfully. Program ID: " + std::to_string(ID));
+        }
+        
+        // Once linked, the individual shader objects can be deleted.
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+    }
+    
+    // Activates the shader program.
+    void Use() {
+        glUseProgram(ID);
+    }
+};
+
+#endif
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Submesh.h
+------------------------------------------------------------
+#ifndef SUBMESH_H
+#define SUBMESH_H
+
+#include <vector>
+#include <iostream>
+#include <glad/glad.h>
+#include "ModelLoader.h"  // Defines the Vertex structure
+#include "Material.h"     // Defines the Material structure
+#include "Logger.h"
+
+// Structure representing a submesh, which contains vertices, indices, a VAO, and its material.
+struct Submesh {
+    std::vector<Vertex> vertices;          // Vertex data for the submesh.
+    std::vector<unsigned int> indices;     // Index data for drawing the submesh.
+    unsigned int VAO;                      // Vertex Array Object ID.
+    Material material;                     // Material properties for the submesh.
+    
+    // Constructor initializes VAO to 0.
+    Submesh() : VAO(0) { }
+    
+    // Sets up the mesh by creating and binding the VAO, VBO, and EBO, and configuring vertex attributes.
+    void setupMesh() {
+        if (vertices.empty() || indices.empty()) {
+            Logger::Warning("[Submesh::setupMesh] No vertices or indices available to set up the mesh.");
+            return;
+        }
+        
+        unsigned int VBO, EBO;
+        glGenVertexArrays(1, &VAO);
+        Logger::Debug("[Submesh::setupMesh] Generated VAO with ID: " + std::to_string(VAO));
+        if (VAO == 0) {
+            Logger::Error("[Submesh::setupMesh] Failed to generate VAO. Ensure an OpenGL context is active.");
+        }
+        glGenBuffers(1, &VBO);
+        glGenBuffers(1, &EBO);
+        
+        glBindVertexArray(VAO);
+        
+        // Set up Vertex Buffer Object (VBO)
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+        GLenum err = glGetError();
+        if(err != GL_NO_ERROR) {
+            Logger::Error("[Submesh::setupMesh] Error loading VBO: " + std::to_string(err));
+        }
+        
+        // Set up Element Buffer Object (EBO)
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+        err = glGetError();
+        if(err != GL_NO_ERROR) {
+            Logger::Error("[Submesh::setupMesh] Error loading EBO: " + std::to_string(err));
+        }
+        
+        Logger::Info("[Submesh::setupMesh] Configuring submesh with " + std::to_string(vertices.size()) +
+                     " vertices and " + std::to_string(indices.size()) + " indices.");
+        Logger::Debug("[Submesh::setupMesh] Vertex size: " + std::to_string(sizeof(Vertex)) +
+                      " bytes. Offsets - Normal: " + std::to_string(offsetof(Vertex, Normal)) +
+                      ", TexCoords: " + std::to_string(offsetof(Vertex, TexCoords)) +
+                      ", Tangent: " + std::to_string(offsetof(Vertex, Tangent)));
+        
+        // Configure vertex attributes.
+        // Attribute 0: Position (vec3)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
+        glEnableVertexAttribArray(0);
+        
+        // Attribute 1: Normal (vec3)
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
+        glEnableVertexAttribArray(1);
+        
+        // Attribute 2: Texture Coordinates (vec2)
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
+        glEnableVertexAttribArray(2);
+        
+        // Attribute 3: Tangent (vec3)
+        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
+        glEnableVertexAttribArray(3);
+        
+        glBindVertexArray(0);
+    }
+    
+    // Draws the submesh by binding the appropriate textures and VAO, then issuing a draw call.
+    // Archivo: Submesh.h (método Draw() actualizado)
+void Draw() {
+    // Se asigna cada tipo de textura a una unidad (0: Albedo, 1: Roughness, 2: Metalness, etc.)
+    if (material.textures.find(TextureType::ALBEDO) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::ALBEDO]->ID);
+    }
+    if (material.textures.find(TextureType::ROUGHNESS) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::ROUGHNESS]->ID);
+    }
+    if (material.textures.find(TextureType::METALNESS) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::METALNESS]->ID);
+    }
+    if (material.textures.find(TextureType::NORMAL) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::NORMAL]->ID);
+    }
+    if (material.textures.find(TextureType::HEIGHT) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::HEIGHT]->ID);
+    }
+    if (material.textures.find(TextureType::AO) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::AO]->ID);
+    }
+    if (material.textures.find(TextureType::SPECULAR) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::SPECULAR]->ID);
+    }
+    if (material.textures.find(TextureType::EMISSIVE) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::EMISSIVE]->ID);
+    }
+    if (material.textures.find(TextureType::GLOSSINESS) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE8);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::GLOSSINESS]->ID);
+    }
+    if (material.textures.find(TextureType::OPACITY) != material.textures.end()) {
+        glActiveTexture(GL_TEXTURE9);
+        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::OPACITY]->ID);
+    }
+
+    if (VAO == 0) {
+        Logger::Error("[Submesh::Draw] VAO is not configured properly.");
+        return;
+    }
+    if (indices.empty()) {
+        Logger::Warning("[Submesh::Draw] The indices vector is empty.");
+        return;
+    }
+    Logger::Debug("[Submesh::Draw] Drawing submesh with " + std::to_string(indices.size()) + " indices.");
+    glBindVertexArray(VAO);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
+}
+
+};
+
+#endif
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Texture2D.h
+------------------------------------------------------------
+#ifndef TEXTURE2D_H
+#define TEXTURE2D_H
+
+#include <glad/glad.h>
+#include <string>
+#include <iostream>
+#include "stb_image.h"
+#include "FileUtils.h"  // Now ImageData is located in FileUtils
+#include "Logger.h"
+
+class Texture2D {
+public:
+    unsigned int ID;       // OpenGL texture ID.
+    int Width, Height;     // Dimensions of the texture.
+    GLenum Internal_Format; // Internal format, e.g., GL_RGB or GL_SRGB_ALPHA for albedo.
+    GLenum Image_Format;    // Image format, e.g., GL_RGB or GL_RGBA.
+
+    // Wrapping and filtering options.
+    GLenum Wrap_S;
+    GLenum Wrap_T;
+    GLenum Filter_Min;
+    GLenum Filter_Mag;
+    
+    // Constructor: Initializes texture properties and generates a texture ID.
+    Texture2D()
+        : Width(0), Height(0),
+          Internal_Format(GL_RGB), Image_Format(GL_RGB),
+          Wrap_S(GL_REPEAT), Wrap_T(GL_REPEAT),
+          Filter_Min(GL_LINEAR_MIPMAP_LINEAR), Filter_Mag(GL_LINEAR)
+    {
+        glGenTextures(1, &ID);
+        Logger::Debug("[Texture2D] Generated texture ID: " + std::to_string(ID));
+    }
+    
+    // Synchronous generation function (not recommended). Use GenerateFromData instead.
+    void Generate(const char* file, bool alpha) {
+        Logger::Warning("[Texture2D::Generate] Synchronous load called. Use GenerateFromData instead.");
+    }
+    
+    // Generates the texture from the provided image data.
+    void GenerateFromData(const FileUtils::ImageData& img, bool alpha) {
+        if (img.data) {
+            Width = img.width;
+            Height = img.height;
+            int desired_channels = alpha ? 4 : 3;
+            GLenum format = (desired_channels == 4) ? GL_RGBA : GL_RGB;
+            
+            if (alpha) {
+                Internal_Format = GL_SRGB_ALPHA;
+                Image_Format = GL_RGBA;
+                Wrap_S = GL_CLAMP_TO_EDGE;
+                Wrap_T = GL_CLAMP_TO_EDGE;
+            } else {
+                Internal_Format = GL_RGB;
+                Image_Format = GL_RGB;
+            }
+            
+            glBindTexture(GL_TEXTURE_2D, ID);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    
+            Logger::Info("[Texture2D::GenerateFromData] Image dimensions: " + std::to_string(Width) + "x" + std::to_string(Height) +
+                         ", Channels: " + std::to_string(desired_channels) + ", Using format: " +
+                         ((format == GL_RGBA) ? "GL_RGBA" : "GL_RGB"));
+            
+            glTexImage2D(GL_TEXTURE_2D, 0, Internal_Format, Width, Height, 0, format, GL_UNSIGNED_BYTE, img.data);
+            GLenum err = glGetError();
+            if (err != GL_NO_ERROR) {
+                Logger::Error("[Texture2D::GenerateFromData] glTexImage2D error: " + std::to_string(err));
+            }
+            
+            glGenerateMipmap(GL_TEXTURE_2D);
+            err = glGetError();
+            if (err != GL_NO_ERROR) {
+                Logger::Error("[Texture2D::GenerateFromData] glGenerateMipmap error: " + std::to_string(err));
+            }
+            
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, Wrap_S);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, Wrap_T);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, Filter_Min);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, Filter_Mag);
+            err = glGetError();
+            if (err != GL_NO_ERROR) {
+                Logger::Error("[Texture2D::GenerateFromData] glTexParameteri error: " + std::to_string(err));
+            }
+            
+            Logger::Info("[Texture2D::GenerateFromData] Texture generated successfully. Texture ID: " + std::to_string(ID));
+            stbi_image_free(img.data);
+        } else {
+            Logger::Error("[Texture2D::GenerateFromData] Image data is null.");
+        }
+    }
+};
+
+#endif // TEXTURE2D_H
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\UniformBuffer.h
+------------------------------------------------------------
+#ifndef UNIFORMBUFFER_H
+#define UNIFORMBUFFER_H
+
+#include <glad/glad.h>
+#include <iostream>
+#include "Logger.h"
+
+// UniformBuffer encapsulates an OpenGL Uniform Buffer Object (UBO).
+// It provides methods for generating, binding, setting data, and binding to a specified binding point.
+class UniformBuffer {
+public:
+    unsigned int ID; // The OpenGL ID for the uniform buffer.
+
+    // Constructor: Generates the UBO and logs its creation.
+    UniformBuffer() {
+        glGenBuffers(1, &ID);
+        Logger::Debug("[UniformBuffer] Generated UBO ID: " + std::to_string(ID));
+    }
+
+    // Binds the UBO to the GL_UNIFORM_BUFFER target.
+    void Bind() {
+        glBindBuffer(GL_UNIFORM_BUFFER, ID);
+    }
+
+    // Unbinds any buffer from the GL_UNIFORM_BUFFER target.
+    void Unbind() {
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
+    }
+
+    // Sets the data for the UBO.
+    // @param size: The size of the data in bytes.
+    // @param data: Pointer to the data to be stored.
+    // @param usage: Usage pattern of the data store (e.g., GL_STATIC_DRAW).
+    void SetData(GLsizeiptr size, const void* data, GLenum usage) {
+        Bind();
+        glBufferData(GL_UNIFORM_BUFFER, size, data, usage);
+        Logger::Info("[UniformBuffer] Data set (size: " + std::to_string(size) + " bytes).");
+        Unbind();
+    }
+
+    // Binds the UBO to a specific binding point.
+    // @param bindingPoint: The binding point to which the UBO is bound.
+    void BindToPoint(GLuint bindingPoint) {
+        glBindBufferBase(GL_UNIFORM_BUFFER, bindingPoint, ID);
+        Logger::Debug("[UniformBuffer] UBO bound to binding point " + std::to_string(bindingPoint));
+    }
+};
+
+#endif // UNIFORMBUFFER_H
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 ------------------------------------------------------------
+// Archivo: Main.cpp
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include "ResourceManager.h"
 #include "Model.h"
-#include "UniformBuffer.h"   // Used for UBOs
+#include "UniformBuffer.h"
 #include "Camera.h"
 #include "Logger.h"
 #include <glm/glm.hpp>
@@ -636,7 +1223,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include "LightManager.h"
 #include "PlayerController.h"
 
-// Global project root
+// Global: Directorio raíz del proyecto.
 std::string gProjectRoot;
 
 std::string GetProjectRoot() {
@@ -651,7 +1238,7 @@ std::string GetProjectRoot() {
     return projectRoot.string();
 }
 
-Camera camera;  // Global camera instance with its default position and orientation
+Camera camera;  // Instancia global de cámara
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -661,9 +1248,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     Logger::Debug("Framebuffer resized: width = " + std::to_string(width) + ", height = " + std::to_string(height));
 }
 
-// For this test, the mouse callback is not used so that the camera remains fixed.
+// (Opcional) Callback para el movimiento del ratón (en este ejemplo se omite su uso)
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    // Camera remains fixed; no mouse updates.
+    // Implementación de control de cámara mediante el ratón si se requiere.
 }
 
 int main() {
@@ -693,8 +1280,7 @@ int main() {
     }
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    // Do not set the mouse callback so that the camera stays fixed
-    // glfwSetCursorPosCallback(window, mouse_callback);
+    // Deshabilitamos el cursor para tener un control personalizado.
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -709,48 +1295,36 @@ int main() {
     Logger::Info("Main: Loading resources...");
     std::string vertexShaderPath = gProjectRoot + "/shaders/pbr_vertex.glsl";
     std::string fragmentShaderPath = gProjectRoot + "/shaders/pbr_fragment.glsl";
-    std::string albedoPath = gProjectRoot + "/assets/car/textures/Material_294_baseColor.png";
-    std::string albedo2Path = gProjectRoot + "/assets/car/textures/Material_295_baseColor.png";
-    std::string albedo3Path = gProjectRoot + "/assets/car/textures/Material_316_baseColor.png";
-    std::string mrPath = gProjectRoot + "/assets/car/textures/Material_294_metallicRoughness.png";
-    std::string normalPath = gProjectRoot + "/assets/car/textures/Material_294_normal.png";
     std::string modelPath = gProjectRoot + "/assets/car/scene.gltf";
+    std::string porscheModelPath = gProjectRoot + "/assets/porsche/scene.gltf";
     
+    // Cargamos de forma asíncrona el shader y los modelos.
     auto shaderFuture = std::async(std::launch::deferred, [vertexShaderPath, fragmentShaderPath]() {
         return ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "pbr");
-    });
-    auto albedoFuture = std::async(std::launch::deferred, [albedoPath]() {
-        return ResourceManager::LoadTexture(albedoPath.c_str(), true, "car_albedo");
-    });
-    auto albedo2Future = std::async(std::launch::deferred, [albedo2Path]() {
-        return ResourceManager::LoadTexture(albedo2Path.c_str(), true, "car_albedo2");
-    });
-    auto albedo3Future = std::async(std::launch::deferred, [albedo3Path]() {
-        return ResourceManager::LoadTexture(albedo3Path.c_str(), true, "car_albedo3");
-    });
-    auto mrFuture = std::async(std::launch::deferred, [mrPath]() {
-        return ResourceManager::LoadTexture(mrPath.c_str(), false, "car_mr");
-    });
-    auto normFuture = std::async(std::launch::deferred, [normalPath]() {
-        return ResourceManager::LoadTexture(normalPath.c_str(), false, "car_normal");
     });
     auto modelFuture = std::async(std::launch::deferred, [modelPath]() {
         return ResourceManager::LoadModel(modelPath.c_str(), "car");
     });
+    auto porscheFuture = std::async(std::launch::deferred, [porscheModelPath]() {
+        return ResourceManager::LoadModel(porscheModelPath.c_str(), "porsche");
+    });
     
     auto pbrShader = shaderFuture.get();
-    auto albedo = albedoFuture.get();
-    auto albedo2 = albedo2Future.get();
-    auto albedo3 = albedo3Future.get();
-    auto mrMap = mrFuture.get();
-    auto normMap = normFuture.get();
     auto carModel = modelFuture.get();
+    auto porscheModel = porscheFuture.get();
     
+    // Configuramos las unidades de textura del shader según el nuevo sistema:
     pbrShader->Use();
     glUniform1i(glGetUniformLocation(pbrShader->ID, "albedoMap"), 0);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "metallicRoughnessMap"), 1);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "normalMap"), 2);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "useMaps"), 1);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "roughnessMap"), 1);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "metalnessMap"), 2);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "normalMap"), 3);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "heightMap"), 4);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "aoMap"), 5);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "specularMap"), 6);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "emissiveMap"), 7);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "glossinessMap"), 8);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "opacityMap"), 9);
     
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f/1080.0f, 0.1f, 100.0f);
     glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
@@ -759,12 +1333,21 @@ int main() {
     Logger::Info("Main: Setting up scene...");
     std::shared_ptr<Scene> scene = std::make_shared<Scene>();
     std::shared_ptr<ModelNode> carNode = std::make_shared<ModelNode>(carModel);
-
+    std::shared_ptr<ModelNode> porscheNode = std::make_shared<ModelNode>(porscheModel);
+    
+    // Configuración de las transformaciones de los modelos
     carNode->localTransform = glm::mat4(1.0f);
     carNode->localTransform = glm::translate(carNode->localTransform, glm::vec3(0.0f, -1.0f, 0.0f));
     carNode->localTransform = glm::rotate(carNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     carNode->localTransform = glm::scale(carNode->localTransform, glm::vec3(0.01f));
+    
+    porscheNode->localTransform = glm::mat4(1.0f);
+    porscheNode->localTransform = glm::translate(porscheNode->localTransform, glm::vec3(0.0f, 0.0f, 5.0f));
+    porscheNode->localTransform = glm::rotate(porscheNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    porscheNode->localTransform = glm::scale(porscheNode->localTransform, glm::vec3(1.0f));
+    
     scene->GetRoot()->AddChild(carNode);
+    scene->GetRoot()->AddChild(porscheNode);
     Logger::Info("Main: Scene setup completed.");
     
     Logger::Info("Main: Creating PlayerController to move the model...");
@@ -773,16 +1356,18 @@ int main() {
     Logger::Info("Main: Configuring lights using LightManager...");
     LightManager lightManager;
     {
+        // Luz puntual 1
         Light pointLight1 = {};
-        pointLight1.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        pointLight1.typeAndPadding = glm::vec4(static_cast<int>(LightType::POINT), 0, 0, 0);
         pointLight1.position = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
         pointLight1.direction = glm::vec4(0.0f);
         pointLight1.colorAndIntensity = glm::vec4(1.0f, 0.5f, 0.5f, 1.0f);
         pointLight1.spotParams = glm::vec4(0.0f);
         lightManager.AddLight(pointLight1);
     
+        // Luz puntual 2
         Light pointLight2 = {};
-        pointLight2.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        pointLight2.typeAndPadding = glm::vec4(static_cast<int>(LightType::POINT), 0, 0, 0);
         pointLight2.position = glm::vec4(-5.0f, 5.0f, 5.0f, 1.0f);
         pointLight2.direction = glm::vec4(0.0f);
         pointLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -790,8 +1375,9 @@ int main() {
         lightManager.AddLight(pointLight2);
     }
     {
+        // Luz de foco (spot) 1
         Light spotLight1 = {};
-        spotLight1.typeAndPadding = glm::vec4(1, 0, 0, 0);
+        spotLight1.typeAndPadding = glm::vec4(static_cast<int>(LightType::SPOT), 0, 0, 0);
         spotLight1.position = glm::vec4(0.0f, 5.0f, 0.0f, 1.0f);
         spotLight1.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
         spotLight1.colorAndIntensity = glm::vec4(0.5f, 1.0f, 0.5f, 1.0f);
@@ -800,8 +1386,9 @@ int main() {
                                            0.0f, 0.0f);
         lightManager.AddLight(spotLight1);
     
+        // Luz de foco (spot) 2
         Light spotLight2 = {};
-        spotLight2.typeAndPadding = glm::vec4(1, 0, 0, 0);
+        spotLight2.typeAndPadding = glm::vec4(static_cast<int>(LightType::SPOT), 0, 0, 0);
         spotLight2.position = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
         spotLight2.direction = glm::vec4(0.0f, -1.0f, -1.0f, 0.0f);
         spotLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 0.5f, 1.0f);
@@ -810,6 +1397,28 @@ int main() {
                                            0.0f, 0.0f);
         lightManager.AddLight(spotLight2);
     }
+    {
+        // Luz direccional
+        Light directionalLight = {};
+        directionalLight.typeAndPadding = glm::vec4(static_cast<int>(LightType::DIRECTIONAL), 0, 0, 0);
+        directionalLight.direction = glm::vec4(-0.2f, -1.0f, -0.3f, 0.0f);
+        directionalLight.colorAndIntensity = glm::vec4(1.0f, 1.0f, 0.9f, 0.7f);
+        directionalLight.position = glm::vec4(0.0f); // No relevante para luz direccional
+        directionalLight.spotParams = glm::vec4(0.0f);
+        lightManager.AddLight(directionalLight);
+    }
+    {
+        // Luz ambiental
+        Light ambientLight = {};
+        ambientLight.typeAndPadding = glm::vec4(static_cast<int>(LightType::AMBIENT), 0, 0, 0);
+        ambientLight.colorAndIntensity = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
+        ambientLight.position = glm::vec4(0.0f);
+        ambientLight.direction = glm::vec4(0.0f);
+        ambientLight.spotParams = glm::vec4(0.0f);
+        lightManager.AddLight(ambientLight);
+    }
+    
+    // Configuración del bloque uniforme para las luces
     unsigned int lightBlockIndex = glGetUniformBlockIndex(pbrShader->ID, "LightBlock");
     if (lightBlockIndex == GL_INVALID_INDEX) {
         Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
@@ -825,30 +1434,30 @@ int main() {
         lastFrame = currentFrame;
         
         glfwPollEvents();
-
-        // --- Comprobación para cerrar la ventana al pulsar Esc ---
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        
+        // Cerrar ventana al pulsar ESC
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
             glfwSetWindowShouldClose(window, true);
-        }
-        // ------------------------------------------------------------
-
-        // Update the model's transformation using the PlayerController
+        
+        // Actualizar la transformación del modelo mediante el PlayerController
         playerController.Update(deltaTime);
         
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
-        // Use the fixed camera view matrix.
+        // Actualizar la vista y enviar la posición de la cámara
         glm::mat4 view = camera.GetViewMatrix();
         pbrShader->Use();
         glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
         
+        // Actualizar y enlazar el UBO de luces
         lightManager.UpdateUBO();
         lightManager.lightUBO.BindToPoint(1);
         
-        glm::vec3 ambientLightColor = glm::vec3(0.2f);
-        glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientLightColor));
+        // Enviar un color ambiental global (opcional)
+        glm::vec3 ambientGlobal = glm::vec3(0.2f);
+        glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientGlobal));
         
         scene->Update();
         scene->Render(*pbrShader);
@@ -865,84 +1474,108 @@ int main() {
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Material.cpp
 ------------------------------------------------------------
-// #include "Material.h"
-// #include "glm/gtc/type_ptr.hpp"
+#include "Material.h"
+#include "Shader.h"
+#include "Logger.h"
+#include <glad/glad.h>
 
-// Material::Material()
-//     : albedoColor(1.0f), metalness(0.0f), roughness(1.0f), ao(1.0f),
-//       isTransparent(false)
-// {
-//     Logger::Debug("[Material] Default material created.");
-// }
+void Material::Apply(Shader &shader) {
+    // Activa el shader.
+    shader.Use();
 
-// void Material::Apply(const Shader &shader) const {
-//     int loc = glGetUniformLocation(shader.ID, "material_isTransparent");
-//     if (loc == -1) {
-//         Logger::Warning("[Material::Apply] Uniform 'material_isTransparent' not found.");
-//     } else {
-//         glUniform1i(loc, isTransparent ? 1 : 0);
-//     }
+    // Envia el color base (baseColorFactor) al shader, siempre.
+    glUniform4fv(glGetUniformLocation(shader.ID, "material_albedoColor"), 1, &baseColor[0]);
 
-//     bool useAlbedoMap = (albedoMap != nullptr);
-//     bool useNormalMap = (normalMap != nullptr);
-//     bool useMRMap = (metallicRoughnessMap != nullptr);
-//     bool useAOMap = (aoMap != nullptr);
+    // ALBEDO (unidad 0)
+    if (textures.find(TextureType::ALBEDO) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasAlbedo"), 1);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::ALBEDO)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasAlbedo"), 0);
+    }
 
-//     glUniform1i(glGetUniformLocation(shader.ID, "material_useAlbedoMap"), useAlbedoMap ? 1 : 0);
-//     glUniform1i(glGetUniformLocation(shader.ID, "material_useNormalMap"), useNormalMap ? 1 : 0);
-//     glUniform1i(glGetUniformLocation(shader.ID, "material_useMetallicRoughnessMap"), useMRMap ? 1 : 0);
-//     glUniform1i(glGetUniformLocation(shader.ID, "material_useAOMap"), useAOMap ? 1 : 0);
+    // ROUGHNESS (unidad 1)
+    if (textures.find(TextureType::ROUGHNESS) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasRoughness"), 1);
+        glActiveTexture(GL_TEXTURE1);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::ROUGHNESS)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasRoughness"), 0);
+    }
 
-//     int textureUnit = 0;
-//     if (useAlbedoMap) {
-//         glActiveTexture(GL_TEXTURE0 + textureUnit);
-//         glBindTexture(GL_TEXTURE_2D, albedoMap->ID);
-//         glUniform1i(glGetUniformLocation(shader.ID, "albedoMap"), textureUnit);
-//         textureUnit++;
-//     }
-//     if (useNormalMap) {
-//         glActiveTexture(GL_TEXTURE0 + textureUnit);
-//         glBindTexture(GL_TEXTURE_2D, normalMap->ID);
-//         glUniform1i(glGetUniformLocation(shader.ID, "normalMap"), textureUnit);
-//         textureUnit++;
-//     }
-//     if (useMRMap) {
-//         glActiveTexture(GL_TEXTURE0 + textureUnit);
-//         glBindTexture(GL_TEXTURE_2D, metallicRoughnessMap->ID);
-//         glUniform1i(glGetUniformLocation(shader.ID, "metallicRoughnessMap"), textureUnit);
-//         textureUnit++;
-//     }
-//     if (useAOMap) {
-//         glActiveTexture(GL_TEXTURE0 + textureUnit);
-//         glBindTexture(GL_TEXTURE_2D, aoMap->ID);
-//         glUniform1i(glGetUniformLocation(shader.ID, "aoMap"), textureUnit);
-//         textureUnit++;
-//     }
-    
-//     glUniform3fv(glGetUniformLocation(shader.ID, "material_albedoColor"), 1, glm::value_ptr(albedoColor));
-//     glUniform1f(glGetUniformLocation(shader.ID, "material_metalness"), metalness);
-//     glUniform1f(glGetUniformLocation(shader.ID, "material_roughness"), roughness);
-//     glUniform1f(glGetUniformLocation(shader.ID, "material_ao"), ao);
-// }
+    // METALNESS (unidad 2)
+    if (textures.find(TextureType::METALNESS) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasMetalness"), 1);
+        glActiveTexture(GL_TEXTURE2);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::METALNESS)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasMetalness"), 0);
+    }
 
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Material.h
-------------------------------------------------------------
-#ifndef MATERIAL_H
-#define MATERIAL_H
+    // NORMAL (unidad 3)
+    if (textures.find(TextureType::NORMAL) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasNormal"), 1);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::NORMAL)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasNormal"), 0);
+    }
 
-#include <memory>
-#include "Texture2D.h"
+    // HEIGHT (unidad 4)
+    if (textures.find(TextureType::HEIGHT) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasHeight"), 1);
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::HEIGHT)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasHeight"), 0);
+    }
 
-struct Material {
-    std::shared_ptr<Texture2D> albedo;
-    std::shared_ptr<Texture2D> metallicRoughness;
-    std::shared_ptr<Texture2D> normal;
+    // AO (unidad 5)
+    if (textures.find(TextureType::AO) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasAO"), 1);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::AO)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasAO"), 0);
+    }
 
-    Material() : albedo(nullptr), metallicRoughness(nullptr), normal(nullptr) { }
-};
+    // SPECULAR (unidad 6)
+    if (textures.find(TextureType::SPECULAR) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasSpecular"), 1);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::SPECULAR)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasSpecular"), 0);
+    }
 
-#endif
+    // EMISSIVE (unidad 7)
+    if (textures.find(TextureType::EMISSIVE) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasEmissive"), 1);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::EMISSIVE)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasEmissive"), 0);
+    }
+
+    // GLOSSINESS (unidad 8)
+    if (textures.find(TextureType::GLOSSINESS) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasGlossiness"), 1);
+        glActiveTexture(GL_TEXTURE8);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::GLOSSINESS)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasGlossiness"), 0);
+    }
+
+    // OPACITY (unidad 9)
+    if (textures.find(TextureType::OPACITY) != textures.end()) {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasOpacity"), 1);
+        glActiveTexture(GL_TEXTURE9);
+        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::OPACITY)->ID);
+    } else {
+        glUniform1i(glGetUniformLocation(shader.ID, "hasOpacity"), 0);
+    }
+}
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.cpp
@@ -962,7 +1595,7 @@ void Model::loadModel(const std::string &path) {
     Logger::Info("[Model::loadModel] Starting model load: " + path);
     
     Assimp::Importer importer;
-    // Read the model file with triangulation, flipped UVs, and tangent space calculation.
+    // Se especifican procesos para triangulación, volteo de UVs y cálculo de tangentes.
     const aiScene* scene = importer.ReadFile(path, 
         aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
     
@@ -972,48 +1605,41 @@ void Model::loadModel(const std::string &path) {
         return;
     }
     
-    // Extract the model's base directory for locating textures.
     std::filesystem::path modelFilePath(path);
     std::string modelDir = modelFilePath.parent_path().generic_string();
     Logger::Info("[Model::loadModel] Model base directory: " + modelDir);
     
-    // Process each mesh in the scene.
+    // Procesa cada mesh de la escena.
     for (unsigned int i = 0; i < scene->mNumMeshes; i++) {
         aiMesh* mesh = scene->mMeshes[i];
         Submesh submesh;
         Logger::Info("[Model::loadModel] Processing mesh " + std::to_string(i) +
                      " with " + std::to_string(mesh->mNumVertices) + " vertices.");
         
-        // Process mesh vertices.
+        // Procesar vértices
         for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
             Vertex vertex;
             vertex.Position = glm::vec3(mesh->mVertices[j].x,
                                         mesh->mVertices[j].y,
                                         mesh->mVertices[j].z);
             if (mesh->HasNormals()) {
-                vertex.Normal = glm::normalize(glm::vec3(mesh->mNormals[j].x,
-                                                         mesh->mNormals[j].y,
-                                                         mesh->mNormals[j].z));
-            } else {
-                vertex.Normal = glm::vec3(0.0f);
+                vertex.Normal = glm::vec3(mesh->mNormals[j].x,
+                                          mesh->mNormals[j].y,
+                                          mesh->mNormals[j].z);
             }
             if (mesh->HasTextureCoords(0)) {
                 vertex.TexCoords = glm::vec2(mesh->mTextureCoords[0][j].x,
                                              mesh->mTextureCoords[0][j].y);
-            } else {
-                vertex.TexCoords = glm::vec2(0.0f, 0.0f);
             }
             if (mesh->HasTangentsAndBitangents()) {
-                vertex.Tangent = glm::normalize(glm::vec3(mesh->mTangents[j].x,
-                                                          mesh->mTangents[j].y,
-                                                          mesh->mTangents[j].z));
-            } else {
-                vertex.Tangent = glm::vec3(0.0f);
+                vertex.Tangent = glm::vec3(mesh->mTangents[j].x,
+                                           mesh->mTangents[j].y,
+                                           mesh->mTangents[j].z);
             }
             submesh.vertices.push_back(vertex);
         }
         
-        // Process mesh faces (indices).
+        // Procesar índices
         for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
             aiFace face = mesh->mFaces[j];
             for (unsigned int k = 0; k < face.mNumIndices; k++) {
@@ -1024,43 +1650,45 @@ void Model::loadModel(const std::string &path) {
         Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) +
                      " has " + std::to_string(mesh->mNumFaces) + " faces.");
         
-        // Process materials and textures.
+        // Procesar materiales y texturas
         if (scene->HasMaterials()) {
             aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
+            auto& texMap = submesh.material.textures;
             
-            // Attempt to get the albedo texture path (first trying BASE_COLOR, then DIFFUSE).
+            // Intentar obtener la textura de albedo probando varios tipos:
             std::string albedoPath = GetTexturePath(material, aiTextureType_BASE_COLOR, modelDir);
             if (albedoPath.empty())
                 albedoPath = GetTexturePath(material, aiTextureType_DIFFUSE, modelDir);
-            if (!albedoPath.empty()) {
+            if (albedoPath.empty())
+                albedoPath = GetTexturePath(material, aiTextureType_UNKNOWN, modelDir);
+            if (!albedoPath.empty()){
                 Logger::Info("[Model::loadModel] Loading albedo texture: " + albedoPath);
-                submesh.material.albedo = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
+                texMap[TextureType::ALBEDO] = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
             } else {
-                Logger::Warning("[Model::loadModel] No albedo texture path found for mesh " + std::to_string(i));
+                Logger::Warning("[Model::loadModel] No albedo texture found for mesh " + std::to_string(i));
+                // Si no se encontró textura, extrae el baseColorFactor (usualmente se encuentra en AI_MATKEY_COLOR_DIFFUSE)
+                aiColor4D colorFactor;
+                if (AI_SUCCESS == aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &colorFactor)) {
+                    submesh.material.baseColor = glm::vec4(colorFactor.r, colorFactor.g, colorFactor.b, colorFactor.a);
+                    Logger::Info("[Model::loadModel] Using baseColorFactor for mesh " + std::to_string(i));
+                } else {
+                    submesh.material.baseColor = glm::vec4(1.0f);
+                }
             }
             
-            // Attempt to load the normal texture.
+            // Procesar las demás texturas (NORMAL, METALNESS, ROUGHNESS, etc.) de forma similar…
+            // Por ejemplo, para la textura normal:
             std::string normalPath = GetTexturePath(material, aiTextureType_NORMALS, modelDir);
-            if (!normalPath.empty()) {
+            if (!normalPath.empty()){
                 Logger::Info("[Model::loadModel] Loading normal texture: " + normalPath);
-                submesh.material.normal = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
+                texMap[TextureType::NORMAL] = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
             } else {
-                Logger::Warning("[Model::loadModel] No normal texture path found for mesh " + std::to_string(i));
+                Logger::Warning("[Model::loadModel] No normal texture found for mesh " + std::to_string(i));
             }
-            
-            // Attempt to load the metallic/roughness texture (try UNKNOWN first, then SPECULAR).
-            std::string mrPath = GetTexturePath(material, aiTextureType_UNKNOWN, modelDir);
-            if (mrPath.empty())
-                mrPath = GetTexturePath(material, aiTextureType_SPECULAR, modelDir);
-            if (!mrPath.empty()) {
-                Logger::Info("[Model::loadModel] Loading metallic/roughness texture: " + mrPath);
-                submesh.material.metallicRoughness = ResourceManager::LoadTexture(mrPath.c_str(), false, mrPath);
-            } else {
-                Logger::Warning("[Model::loadModel] No metallic/roughness texture path found for mesh " + std::to_string(i));
-            }
+            // Y así para METALNESS, ROUGHNESS, etc.
         }
         
-        // Setup the mesh (upload buffers, etc.).
+        // Configura la malla (crea VAO, VBO, EBO, etc.)
         submesh.setupMesh();
         Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) + " loaded: " +
                      std::to_string(submesh.vertices.size()) + " vertices, " +
@@ -1073,8 +1701,6 @@ void Model::loadModel(const std::string &path) {
 
 void Model::Draw() {
     Logger::Info("[Model::Draw] Drawing model with " + std::to_string(submeshes.size()) + " submeshes.");
-    
-    // Iterate over submeshes and draw each one if it has valid data.
     for (size_t i = 0; i < submeshes.size(); ++i) {
         if (submeshes[i].vertices.empty() || submeshes[i].indices.empty()) {
             Logger::Warning("[Model::Draw] Submesh " + std::to_string(i) + " has invalid data. Skipping draw.");
@@ -1083,80 +1709,6 @@ void Model::Draw() {
         submeshes[i].Draw();
     }
 }
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.h
-------------------------------------------------------------
-#ifndef MODEL_H
-#define MODEL_H
-
-#include <string>
-#include <vector>
-#include "ModelLoader.h"
-#include "Submesh.h"
-#include "Material.h"
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
-#include <assimp/scene.h>
-#include <glm/glm.hpp>
-#include <iostream>
-#include "ResourceManager.h"
-#include <filesystem>
-#include "Logger.h"
-
-// Global project root (if needed elsewhere)
-extern std::string gProjectRoot;
-
-// Inline helper function to get the texture path from an aiMaterial.
-// If the texture path is relative, this function prepends the model's base directory.
-inline std::string GetTexturePath(aiMaterial* material, aiTextureType type, const std::string& baseDir) {
-    aiString str;
-    // Attempt to get the texture path for the specified type.
-    if (material->GetTexture(type, 0, &str) != AI_SUCCESS) {
-        // For albedo textures, try DIFFUSE if BASE_COLOR is not found.
-        if (type == aiTextureType_BASE_COLOR) {
-            if (material->GetTexture(aiTextureType_DIFFUSE, 0, &str) != AI_SUCCESS)
-                return "";
-        } else {
-            return "";
-        }
-    }
-    std::string relPath(str.C_Str());
-    Logger::Debug("[GetTexturePath] Original path from material: " + relPath);
-    
-    std::filesystem::path fsPath(relPath);
-    // If the texture path is not absolute, convert it using the model's base directory.
-    if (!fsPath.is_absolute()) {
-        std::string absPath = baseDir + "/" + relPath;
-        Logger::Debug("[GetTexturePath] Converted to absolute path using model directory: " + absPath);
-        return absPath;
-    }
-    return relPath;
-}
-
-// The Model class is responsible for loading a model from a file using Assimp,
-// processing its meshes and materials, and providing a Draw() method to render it.
-class Model {
-public:
-    // A collection of submeshes that make up the model.
-    std::vector<Submesh> submeshes;
-    
-    // Constructor: Loads a model from the specified file path.
-    Model(const std::string &path) {
-        Logger::Info("[Model::Model] Loading model from path: " + path);
-        loadModel(path);
-    }
-    
-    // Draws the model by drawing each of its submeshes.
-    void Draw();
-    
-private:
-    // Loads a model from the specified file path using Assimp.
-    // This function processes the scene and populates the submeshes vector.
-    void loadModel(const std::string &path);
-};
-
-#endif
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ModelLoader.cpp
@@ -1286,307 +1838,104 @@ void processNode(aiNode* node, const aiScene* scene,
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ModelLoader.h
-------------------------------------------------------------
-#ifndef MODELLOADER_H
-#define MODELLOADER_H
-
-#include <glm/glm.hpp>
-#include <vector>
-#include <assimp/scene.h>
-#include "Logger.h"
-
-// Structure for storing vertex data (required for PBR shading; tangent is essential for normal mapping).
-struct Vertex {
-    glm::vec3 Position;   // The vertex position in 3D space.
-    glm::vec3 Normal;     // The normal vector used for lighting calculations.
-    glm::vec2 TexCoords;  // Texture coordinates for mapping textures.
-    glm::vec3 Tangent;    // Tangent vector for correct normal mapping.
-};
-
-// Recursive function to process nodes in an Assimp scene graph.
-// This function extracts vertices and indices from each mesh and applies the parent transform.
-// Detailed debug logs are emitted during processing using Logger.
-void processNode(aiNode* node, const aiScene* scene,
-                 std::vector<Vertex>& vertices,
-                 std::vector<unsigned int>& indices,
-                 const glm::mat4& parentTransform);
-
-#endif // MODELLOADER_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ModelNode.h
-------------------------------------------------------------
-#ifndef MODELNODE_H
-#define MODELNODE_H
-
-#include "SceneNode.h"
-#include "Model.h"
-#include "Logger.h"
-#include <memory>
-#include <glm/gtc/type_ptr.hpp>
-#include <glad/glad.h>
-#include "Shader.h"
-
-// Scene node that encapsulates a 3D model.
-class ModelNode : public SceneNode {
-public:
-    // Pointer to the 3D model associated with this node.
-    std::shared_ptr<Model> model;
-    
-    // Constructor: Initializes the ModelNode with the given model.
-    ModelNode(const std::shared_ptr<Model>& m) : model(m) {
-        Logger::Info("[ModelNode] ModelNode created.");
-    }
-    
-    // Renders the node by sending the global transformation to the shader
-    // and then drawing the model.
-    virtual void Render(const Shader &shader) override {
-        Logger::Debug("[ModelNode] Rendering model node.");
-        if (model) {
-            // Retrieve the location of the "model" uniform in the shader.
-            GLint modelLoc = glGetUniformLocation(shader.ID, "model");
-            if (modelLoc == -1) {
-                Logger::Warning("[ModelNode] Shader uniform 'model' not found.");
-            } else {
-                // Send the global transformation matrix to the shader uniform "model".
-                glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(globalTransform));
-                Logger::Debug("[ModelNode] Global transformation matrix sent to shader uniform 'model'.");
-            }
-            
-            // Draw the model. It is assumed that the shader is already in use
-            // and that all necessary global uniforms have been updated.
-            model->Draw();
-        } else {
-            Logger::Warning("[ModelNode] No model to render.");
-        }
-        
-        // Render any child nodes.
-        SceneNode::Render(shader);
-    }
-};
-
-#endif // MODELNODE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Module.h
-------------------------------------------------------------
-#ifndef MODULE_H
-#define MODULE_H
-
-// The Module class is an abstract interface that defines the lifecycle for a module.
-// Each derived module should implement these methods and is encouraged to include
-// detailed logging (using the Logger) during initialization, per-frame updates, and shutdown.
-class Module {
-public:
-    virtual ~Module() {}
-
-    // Initializes the module.
-    // Returns true if initialization was successful.
-    virtual bool Init() = 0;
-
-    // Updates the module each frame.
-    // 'dt' represents the elapsed time since the last update (in seconds).
-    virtual void Update(float dt) = 0;
-
-    // Releases any resources and shuts down the module.
-    virtual void Shutdown() = 0;
-};
-
-#endif // MODULE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\PhysicsModule.h
-------------------------------------------------------------
-#ifndef PHYSICSMODULE_H
-#define PHYSICSMODULE_H
-
-#include "Module.h"
-#include "Logger.h"
-
-class PhysicsModule : public Module {
-public:
-    // Initializes the physics engine (e.g., Bullet, PhysX, etc.).
-    virtual bool Init() override {
-        Logger::Info("[PhysicsModule] Physics engine initialized.");
-        return true;
-    }
-
-    // Updates the physics engine.
-    // 'dt' represents the time delta (in seconds) since the last update.
-    virtual void Update(float dt) override {
-        Logger::Debug("[PhysicsModule] Updating physics engine (dt = " + std::to_string(dt) + " seconds).");
-    }
-
-    // Shuts down the physics engine and releases allocated resources.
-    virtual void Shutdown() override {
-        Logger::Info("[PhysicsModule] Physics engine shutdown.");
-    }
-};
-
-#endif // PHYSICSMODULE_H
-
-------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\PlayerController.cpp
 ------------------------------------------------------------
 #include "PlayerController.h"
 #include <GLFW/glfw3.h>
 #include <glm/gtc/matrix_transform.hpp>
 
-// Constructor: Stores the player's base transform and initial position.
-// Also logs the initial position for debugging purposes.
+// Constructor: stores the model's base transform, initializes the model's position, and sets a fixed camera offset.
 PlayerController::PlayerController(SceneNode* player, Camera* camera)
     : m_Player(player), m_Camera(camera), m_MoveSpeed(5.0f),
       m_RotateSpeed(glm::radians(90.0f)), m_PlayerYaw(0.0f)
 {
-    // Save the initial local transform of the player.
+    // Save the base transform (original translation, rotation, scale) of the model as set in main.
     m_BaseTransform = m_Player->localTransform;
-    // Extract the initial position from the transform's translation column.
+    // Extract the initial position from the base transform.
     m_PlayerPosition = glm::vec3(m_BaseTransform[3]);
-    Logger::Info("[PlayerController] Initialized with base position (" +
+    Logger::Info("PlayerController: Initialized. Base position = (" +
                  std::to_string(m_PlayerPosition.x) + ", " +
                  std::to_string(m_PlayerPosition.y) + ", " +
                  std::to_string(m_PlayerPosition.z) + ").");
+    
+    // Set a fixed camera offset. This offset will remain constant regardless of model rotation.
+    // For example, (0, 8, 12) places the camera 8 units above and 12 units behind the model.
+    m_CameraOffset = glm::vec3(0.0f, 8.0f, 12.0f);
+    Logger::Info("PlayerController: Camera offset set to (" +
+                 std::to_string(m_CameraOffset.x) + ", " +
+                 std::to_string(m_CameraOffset.y) + ", " +
+                 std::to_string(m_CameraOffset.z) + ").");
 }
 
 void PlayerController::Update(float dt) {
-    // Retrieve the current GLFW window context.
     GLFWwindow* window = glfwGetCurrentContext();
     if (!window) {
-        Logger::Error("[PlayerController::Update] No current GLFW window.");
+        Logger::Error("PlayerController::Update: No current GLFW window.");
         return;
     }
 
-    // Poll keyboard input for movement and rotation.
+    // Read keyboard input for movement and rotation.
     bool moveForward  = glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS;
     bool moveBackward = glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS;
     bool turnLeft     = glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS;
     bool turnRight    = glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS;
+    Logger::Debug("PlayerController::Update: Input states - W: " + std::to_string(moveForward) +
+                  ", S: " + std::to_string(moveBackward) +
+                  ", A: " + std::to_string(turnLeft) +
+                  ", D: " + std::to_string(turnRight));
 
-    Logger::Debug("[PlayerController::Update] Input - W:" + std::to_string(moveForward) +
-                  " S:" + std::to_string(moveBackward) +
-                  " A:" + std::to_string(turnLeft) +
-                  " D:" + std::to_string(turnRight));
-
-    // Update the player's yaw angle based on rotation input.
+    // Update the model's yaw (rotation around Y-axis) based on left/right input.
     if (turnLeft)
         m_PlayerYaw += m_RotateSpeed * dt;
     if (turnRight)
         m_PlayerYaw -= m_RotateSpeed * dt;
+    Logger::Debug("PlayerController::Update: Updated yaw = " + std::to_string(m_PlayerYaw));
 
-    Logger::Debug("[PlayerController::Update] Updated yaw = " + std::to_string(m_PlayerYaw));
+    // Create a dynamic rotation matrix using the updated yaw.
+    glm::mat4 R = glm::rotate(glm::mat4(1.0f), m_PlayerYaw, glm::vec3(0, 1, 0));
 
-    // Construct the rotation matrix from the updated yaw.
-    glm::mat4 rotationMatrix = glm::rotate(glm::mat4(1.0f), m_PlayerYaw, glm::vec3(0, 1, 0));
-    // Calculate the forward vector by applying the rotation to the default forward direction (0, 0, 1).
-    glm::mat3 rotation3x3 = glm::mat3(rotationMatrix);
-    glm::vec3 forward = glm::normalize(rotation3x3 * glm::vec3(0, 0, 1));
-
-    Logger::Debug("[PlayerController::Update] Forward vector = (" +
+    // Compute the forward vector by applying the rotation to the vector (0, 0, 1).
+    // Using (0,0,1) ensures that pressing 'W' moves the model forward.
+    glm::mat3 dynamicRotation = glm::mat3(R);
+    glm::vec3 forward = dynamicRotation * glm::vec3(0, 0, 1);
+    forward = glm::normalize(forward);
+    Logger::Debug("PlayerController::Update: Computed forward vector = (" +
                   std::to_string(forward.x) + ", " +
                   std::to_string(forward.y) + ", " +
                   std::to_string(forward.z) + ")");
 
-    // Update the player's position based on forward/backward movement.
+    // Update the model's position based on forward/backward input.
     if (moveForward)
         m_PlayerPosition += forward * m_MoveSpeed * dt;
     if (moveBackward)
         m_PlayerPosition -= forward * m_MoveSpeed * dt;
-
-    Logger::Debug("[PlayerController::Update] Updated position = (" +
+    Logger::Debug("PlayerController::Update: Updated model position = (" +
                   std::to_string(m_PlayerPosition.x) + ", " +
                   std::to_string(m_PlayerPosition.y) + ", " +
                   std::to_string(m_PlayerPosition.z) + ")");
 
-    // Construct the translation matrix from the updated position.
-    glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), m_PlayerPosition);
-    // Update the player's transformation by combining translation, rotation, and the base transform.
-    m_Player->localTransform = translationMatrix * rotationMatrix * m_BaseTransform;
-    Logger::Info("[PlayerController::Update] Player transform updated.");
+    // Build the translation matrix using the updated position.
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), m_PlayerPosition);
+    // Update the model's transformation by combining translation, rotation, and the base transform.
+    m_Player->localTransform = T * R * m_BaseTransform;
+    Logger::Info("PlayerController::Update: Model transform updated.");
 
-    // Note: For this test, the camera remains fixed.
+    // --- Automatic Camera Follow Implementation ---
+    // In this implementation, the camera will follow the model's position but maintain a fixed offset.
+    // The fixed offset is not transformed by the model's rotation, so the camera's framing remains consistent.
+    m_Camera->Position = m_PlayerPosition + m_CameraOffset;
+    // Update the camera's front vector so that it always looks at the model.
+    m_Camera->Front = glm::normalize(m_PlayerPosition - m_Camera->Position);
+    // Keep the camera's up vector fixed.
+    m_Camera->Up = glm::vec3(0, 1, 0);
+    Logger::Info("PlayerController::Update: Camera updated to follow model. New Camera Position = (" +
+                 std::to_string(m_Camera->Position.x) + ", " +
+                 std::to_string(m_Camera->Position.y) + ", " +
+                 std::to_string(m_Camera->Position.z) + "), Front = (" +
+                 std::to_string(m_Camera->Front.x) + ", " +
+                 std::to_string(m_Camera->Front.y) + ", " +
+                 std::to_string(m_Camera->Front.z) + ").");
 }
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\PlayerController.h
-------------------------------------------------------------
-#ifndef PLAYERCONTROLLER_H
-#define PLAYERCONTROLLER_H
-
-#include <glm/glm.hpp>
-#include "SceneNode.h"
-#include "Camera.h"
-
-// The PlayerController is responsible for handling the player's movement and rotation based on keyboard input.
-// It updates the transformation of the player node (e.g., a car model) each frame.
-// Note: Detailed logging is implemented in the source file (PlayerController.cpp).
-class PlayerController {
-public:
-    // Constructor: Accepts pointers to the player node and the camera.
-    // In this example, the camera remains fixed and is not updated by the controller.
-    PlayerController(SceneNode* player, Camera* camera);
-
-    // Updates the player's transformation based on input.
-    // 'dt' represents the time elapsed (in seconds) since the last update.
-    void Update(float dt);
-
-private:
-    SceneNode* m_Player;  // Pointer to the player node (e.g., the car model)
-    Camera* m_Camera;     // Pointer to the camera (unused in this test)
-
-    float m_MoveSpeed;    // Movement speed in units per second.
-    float m_RotateSpeed;  // Rotation speed in radians per second.
-
-    // Current state of the player.
-    glm::vec3 m_PlayerPosition; // Updated position based on input.
-    float m_PlayerYaw;          // Updated yaw (rotation around the Y-axis) based on input.
-
-    // The base transformation (original transform) of the player model as set in main.
-    glm::mat4 m_BaseTransform;
-};
-
-#endif // PLAYERCONTROLLER_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\RendererModule.h
-------------------------------------------------------------
-#ifndef RENDERERMODULE_H
-#define RENDERERMODULE_H
-
-#include "Module.h"
-#include "Logger.h"  // Use Logger for detailed logging instead of std::cout
-#include <glm/glm.hpp>
-
-// RendererModule is responsible for initializing and managing the rendering system.
-// This includes creating the window, setting up the OpenGL context, and rendering the scene.
-class RendererModule : public Module {
-public:
-    // Initializes the renderer.
-    // Returns true if the initialization was successful.
-    virtual bool Init() override {
-        Logger::Info("[RendererModule] Initializing renderer.");
-        // Here, the window and OpenGL context would be created and configured.
-        Logger::Debug("[RendererModule] Creating window and OpenGL context...");
-        // Additional initialization code goes here.
-        Logger::Info("[RendererModule] Renderer initialized successfully.");
-        return true;
-    }
-    
-    // Updates the renderer each frame.
-    // 'dt' represents the time elapsed since the last update (in seconds).
-    virtual void Update(float dt) override {
-        Logger::Debug("[RendererModule] Rendering frame (dt = " + std::to_string(dt) + " seconds).");
-        // Scene rendering would occur here.
-    }
-    
-    // Shuts down the renderer and releases any associated resources.
-    virtual void Shutdown() override {
-        Logger::Info("[RendererModule] Shutting down renderer.");
-        // Cleanup code for the window, OpenGL context, and other resources goes here.
-    }
-};
-
-#endif // RENDERERMODULE_H
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ResourceManager.cpp
@@ -1728,313 +2077,6 @@ std::future<std::shared_ptr<Model>> ResourceManager::LoadModelAsync(const char* 
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ResourceManager.h
-------------------------------------------------------------
-#ifndef RESOURCEMANAGER_H
-#define RESOURCEMANAGER_H
-
-#include <map>
-#include <string>
-#include <memory>
-#include <future>
-#include "Shader.h"
-#include "Texture2D.h"
-
-// Forward declaration to avoid circular dependency.
-class Model;
-
-// The ResourceManager class is responsible for loading, caching, and providing access to various resources
-// such as shaders, textures, and models. This avoids redundant loading and improves performance.
-// Detailed logging is performed in the corresponding source file to trace resource management events.
-class ResourceManager {
-public:
-    // Loads a shader from the specified vertex and fragment shader files, and stores it under the given name.
-    // Returns a shared pointer to the loaded Shader.
-    static std::shared_ptr<Shader> LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name);
-    
-    // Retrieves a previously loaded shader by its name.
-    static std::shared_ptr<Shader> GetShader(std::string name);
-    
-    // Loads a texture from a file. If 'alpha' is true, the texture is loaded with an alpha channel.
-    // The texture is stored under the provided name.
-    static std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, std::string name);
-    
-    // Retrieves a previously loaded texture by its name.
-    static std::shared_ptr<Texture2D> GetTexture(std::string name);
-    
-    // Loads a 3D model from a file and stores it under the specified name.
-    static std::shared_ptr<Model> LoadModel(const char* file, std::string name);
-    
-    // Retrieves a previously loaded model by its name.
-    static std::shared_ptr<Model> GetModel(std::string name);
-    
-    // Clears all loaded resources (shaders, textures, and models). Note that models are automatically released via shared_ptr.
-    static void Clear();
-    
-    // Asynchronously loads a 3D model from a file. Returns a future that holds a shared pointer to the loaded Model.
-    static std::future<std::shared_ptr<Model>> LoadModelAsync(const char* file, std::string name);
-    
-private:
-    // Private constructor to prevent instantiation.
-    ResourceManager() { }
-    
-    // Static maps for caching loaded resources.
-    static std::map<std::string, std::shared_ptr<Shader>> Shaders;
-    static std::map<std::string, std::shared_ptr<Texture2D>> Textures;
-    static std::map<std::string, std::shared_ptr<Model>> Models;
-};
-
-#endif // RESOURCEMANAGER_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Scene.h
-------------------------------------------------------------
-#ifndef SCENE_H
-#define SCENE_H
-
-#include "SceneNode.h"
-#include "Shader.h"
-#include "Logger.h"
-#include <memory>
-
-/// Class representing the complete scene.
-class Scene {
-public:
-    // Constructor: Creates a scene with an empty root node.
-    Scene() {
-        root = std::make_shared<SceneNode>();
-        Logger::Info("[Scene] Scene created with an empty root node.");
-    }
-    
-    // Updates the scene by calling Update() on the root node.
-    void Update() {
-        Logger::Debug("[Scene] Updating scene...");
-        root->Update();
-        Logger::Debug("[Scene] Scene update completed.");
-    }
-    
-    // Renders the scene by invoking Render() on the root node with the provided shader.
-    void Render(const Shader &shader) {
-        Logger::Debug("[Scene] Rendering scene using the provided shader...");
-        root->Render(shader);
-        Logger::Debug("[Scene] Scene render completed.");
-    }
-    
-    // Returns the root node of the scene.
-    std::shared_ptr<SceneNode> GetRoot() {
-        Logger::Debug("[Scene] Retrieving root node.");
-        return root;
-    }
-    
-private:
-    std::shared_ptr<SceneNode> root; // Root node of the scene graph.
-};
-
-#endif // SCENE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\SceneNode.h
-------------------------------------------------------------
-#ifndef SCENENODE_H
-#define SCENENODE_H
-
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <vector>
-#include <memory>
-#include "Logger.h"
-#include "Shader.h"  // Ensure to include the Shader header
-
-/// Base class for scene nodes.
-class SceneNode {
-public:
-    glm::mat4 localTransform;  // Local transformation matrix.
-    glm::mat4 globalTransform; // Global transformation matrix computed recursively.
-
-    // Constructor: Initializes both local and global transforms to identity.
-    SceneNode() 
-        : localTransform(1.0f), globalTransform(1.0f) { 
-        Logger::Debug("[SceneNode] SceneNode created with identity transforms.");
-    }
-
-    virtual ~SceneNode() { }
-
-    // Adds a child node to this scene node.
-    void AddChild(const std::shared_ptr<SceneNode>& child) {
-        children.push_back(child);
-        Logger::Debug("[SceneNode] Child added to scene node. Total children: " + std::to_string(children.size()));
-    }
-
-    /// Recursively updates the global transformation based on the parent's transform.
-    /// @param parentTransform The transformation matrix from the parent node.
-    virtual void Update(const glm::mat4& parentTransform = glm::mat4(1.0f)) {
-        globalTransform = parentTransform * localTransform;
-        Logger::Debug("[SceneNode::Update] Global transform updated.");
-        for (auto& child : children) {
-            child->Update(globalTransform);
-        }
-    }
-
-    /// Renders this node and all its child nodes.
-    /// @param shader The shader used for rendering.
-    virtual void Render(const Shader &shader) {
-        Logger::Debug("[SceneNode::Render] Rendering node with " + std::to_string(children.size()) + " children.");
-        for (auto& child : children) {
-            child->Render(shader);
-        }
-    }
-
-protected:
-    std::vector<std::shared_ptr<SceneNode>> children; // List of child nodes.
-};
-
-#endif // SCENENODE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ScriptingModule.h
-------------------------------------------------------------
-#ifndef SCRIPTINGMODULE_H
-#define SCRIPTINGMODULE_H
-
-#include "Module.h"
-#include "Logger.h"  // Use Logger for detailed logging instead of std::cout
-
-// ScriptingModule is responsible for integrating a scripting language (e.g., Lua, Python, etc.)
-// into the application. It handles initialization, per-frame updates, and shutdown of the scripting engine.
-class ScriptingModule : public Module {
-public:
-    // Initializes the scripting engine.
-    // Returns true if the scripting engine was successfully initialized.
-    virtual bool Init() override {
-        Logger::Info("[ScriptingModule] Initializing scripting engine.");
-        // Here, integration of a scripting language (e.g., Lua, Python, etc.) would take place.
-        Logger::Debug("[ScriptingModule] Scripting engine integration setup complete.");
-        return true;
-    }
-
-    // Updates the scripting engine each frame.
-    // 'dt' represents the time delta (in seconds) since the last update.
-    virtual void Update(float dt) override {
-        Logger::Debug("[ScriptingModule] Updating scripting engine (dt = " + std::to_string(dt) + " seconds).");
-    }
-
-    // Shuts down the scripting engine and releases any associated resources.
-    virtual void Shutdown() override {
-        Logger::Info("[ScriptingModule] Shutting down scripting engine.");
-    }
-};
-
-#endif // SCRIPTINGMODULE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Shader.h
-------------------------------------------------------------
-#ifndef SHADER_H
-#define SHADER_H
-
-#include <glad/glad.h>
-#include <string>
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include "Logger.h"  // Include Logger for detailed logging
-
-class Shader {
-public:
-    unsigned int ID;
-    
-    // Constructor initializes the shader ID to 0.
-    Shader() : ID(0) { }
-    
-    // Compiles the shader from given vertex and fragment shader file paths.
-    void Compile(const char* vertexPath, const char* fragmentPath) {
-        std::string vertexCode;
-        std::string fragmentCode;
-        std::ifstream vShaderFile;
-        std::ifstream fShaderFile;
-        
-        // Enable exceptions on ifstream objects for robust error handling.
-        vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        try {
-            Logger::Debug("[Shader::Compile] Opening vertex shader file: " + std::string(vertexPath));
-            vShaderFile.open(vertexPath);
-            Logger::Debug("[Shader::Compile] Opening fragment shader file: " + std::string(fragmentPath));
-            fShaderFile.open(fragmentPath);
-            
-            std::stringstream vShaderStream, fShaderStream;
-            vShaderStream << vShaderFile.rdbuf();
-            fShaderStream << fShaderFile.rdbuf();
-            vertexCode = vShaderStream.str();
-            fragmentCode = fShaderStream.str();
-            
-            Logger::Debug("[Shader::Compile] Vertex shader code length: " + std::to_string(vertexCode.size()) + " bytes");
-            Logger::Debug("[Shader::Compile] Fragment shader code length: " + std::to_string(fragmentCode.size()) + " bytes");
-            
-            vShaderFile.close();
-            fShaderFile.close();
-        } catch (std::ifstream::failure&) {
-            Logger::Error("[Shader::Compile] ERROR: Failed to read shader file: " + std::string(vertexPath) + " or " + std::string(fragmentPath));
-        }
-        
-        const char* vShaderCode = vertexCode.c_str();
-        const char* fShaderCode = fragmentCode.c_str();
-        
-        unsigned int vertex, fragment;
-        int success;
-        char infoLog[512];
-        
-        // Compile vertex shader.
-        vertex = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertex, 1, &vShaderCode, NULL);
-        glCompileShader(vertex);
-        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(vertex, 512, NULL, infoLog);
-            Logger::Error(std::string("[Shader::Compile] ERROR: Vertex shader compilation failed\n") + infoLog);
-        } else {
-            Logger::Info("[Shader::Compile] Vertex shader compiled successfully.");
-        }
-        
-        // Compile fragment shader.
-        fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment, 1, &fShaderCode, NULL);
-        glCompileShader(fragment);
-        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(fragment, 512, NULL, infoLog);
-            Logger::Error(std::string("[Shader::Compile] ERROR: Fragment shader compilation failed\n") + infoLog);
-        } else {
-            Logger::Info("[Shader::Compile] Fragment shader compiled successfully.");
-        }
-        
-        // Create shader program, attach shaders, and link the program.
-        ID = glCreateProgram();
-        glAttachShader(ID, vertex);
-        glAttachShader(ID, fragment);
-        glLinkProgram(ID);
-        glGetProgramiv(ID, GL_LINK_STATUS, &success);
-        if (!success) {
-            glGetProgramInfoLog(ID, 512, NULL, infoLog);
-            Logger::Error(std::string("[Shader::Compile] ERROR: Shader program linking failed\n") + infoLog);
-        } else {
-            Logger::Info("[Shader::Compile] Shader program linked successfully. Program ID: " + std::to_string(ID));
-        }
-        
-        // Once linked, the individual shader objects can be deleted.
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-    }
-    
-    // Activates the shader program.
-    void Use() {
-        glUseProgram(ID);
-    }
-};
-
-#endif
-
-------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\stb_image.cpp
 ------------------------------------------------------------
 // stb_image.cpp
@@ -2045,345 +2087,9 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\stb_image.cpp
 #include "stb_image.h"
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Submesh.h
-------------------------------------------------------------
-#ifndef SUBMESH_H
-#define SUBMESH_H
-
-#include <vector>
-#include <iostream>
-#include <glad/glad.h>
-#include "ModelLoader.h"  // Defines the Vertex structure
-#include "Material.h"     // Defines the Material structure
-#include "Logger.h"
-
-// Structure representing a submesh, which contains vertices, indices, a VAO, and its material.
-struct Submesh {
-    std::vector<Vertex> vertices;          // Vertex data for the submesh.
-    std::vector<unsigned int> indices;     // Index data for drawing the submesh.
-    unsigned int VAO;                      // Vertex Array Object ID.
-    Material material;                     // Material properties for the submesh.
-    
-    // Constructor initializes VAO to 0.
-    Submesh() : VAO(0) { }
-    
-    // Sets up the mesh by creating and binding the VAO, VBO, and EBO, and configuring vertex attributes.
-    void setupMesh() {
-        if (vertices.empty() || indices.empty()) {
-            Logger::Warning("[Submesh::setupMesh] No vertices or indices available to set up the mesh.");
-            return;
-        }
-        
-        unsigned int VBO, EBO;
-        glGenVertexArrays(1, &VAO);
-        Logger::Debug("[Submesh::setupMesh] Generated VAO with ID: " + std::to_string(VAO));
-        if (VAO == 0) {
-            Logger::Error("[Submesh::setupMesh] Failed to generate VAO. Ensure an OpenGL context is active.");
-        }
-        glGenBuffers(1, &VBO);
-        glGenBuffers(1, &EBO);
-        
-        glBindVertexArray(VAO);
-        
-        // Set up Vertex Buffer Object (VBO)
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
-        GLenum err = glGetError();
-        if(err != GL_NO_ERROR) {
-            Logger::Error("[Submesh::setupMesh] Error loading VBO: " + std::to_string(err));
-        }
-        
-        // Set up Element Buffer Object (EBO)
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
-        err = glGetError();
-        if(err != GL_NO_ERROR) {
-            Logger::Error("[Submesh::setupMesh] Error loading EBO: " + std::to_string(err));
-        }
-        
-        Logger::Info("[Submesh::setupMesh] Configuring submesh with " + std::to_string(vertices.size()) +
-                     " vertices and " + std::to_string(indices.size()) + " indices.");
-        Logger::Debug("[Submesh::setupMesh] Vertex size: " + std::to_string(sizeof(Vertex)) +
-                      " bytes. Offsets - Normal: " + std::to_string(offsetof(Vertex, Normal)) +
-                      ", TexCoords: " + std::to_string(offsetof(Vertex, TexCoords)) +
-                      ", Tangent: " + std::to_string(offsetof(Vertex, Tangent)));
-        
-        // Configure vertex attributes.
-        // Attribute 0: Position (vec3)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-        glEnableVertexAttribArray(0);
-        
-        // Attribute 1: Normal (vec3)
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
-        glEnableVertexAttribArray(1);
-        
-        // Attribute 2: Texture Coordinates (vec2)
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
-        glEnableVertexAttribArray(2);
-        
-        // Attribute 3: Tangent (vec3)
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
-        glEnableVertexAttribArray(3);
-        
-        glBindVertexArray(0);
-    }
-    
-    // Draws the submesh by binding the appropriate textures and VAO, then issuing a draw call.
-    void Draw() {
-        // Bind albedo texture to texture unit 0.
-        if (material.albedo) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, material.albedo->ID);
-        }
-        // Bind metallic/roughness texture to texture unit 1.
-        if (material.metallicRoughness) {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID);
-        }
-        // Bind normal texture to texture unit 2.
-        if (material.normal) {
-            glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, material.normal->ID);
-        }
-        
-        if (VAO == 0) {
-            Logger::Error("[Submesh::Draw] VAO is not configured properly.");
-            return;
-        }
-        if (indices.empty()) {
-            Logger::Warning("[Submesh::Draw] The indices vector is empty.");
-            return;
-        }
-        Logger::Debug("[Submesh::Draw] Drawing submesh with " + std::to_string(indices.size()) + " indices.");
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
-        GLenum err = glGetError();
-        if (err != GL_NO_ERROR) {
-            Logger::Error("[Submesh::Draw] OpenGL error during drawing: " + std::to_string(err));
-        }
-        glBindVertexArray(0);
-    }
-};
-
-#endif
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Texture2D.h
-------------------------------------------------------------
-#ifndef TEXTURE2D_H
-#define TEXTURE2D_H
-
-#include <glad/glad.h>
-#include <string>
-#include <iostream>
-#include "stb_image.h"
-#include "FileUtils.h"  // Now ImageData is located in FileUtils
-#include "Logger.h"
-
-class Texture2D {
-public:
-    unsigned int ID;       // OpenGL texture ID.
-    int Width, Height;     // Dimensions of the texture.
-    GLenum Internal_Format; // Internal format, e.g., GL_RGB or GL_SRGB_ALPHA for albedo.
-    GLenum Image_Format;    // Image format, e.g., GL_RGB or GL_RGBA.
-
-    // Wrapping and filtering options.
-    GLenum Wrap_S;
-    GLenum Wrap_T;
-    GLenum Filter_Min;
-    GLenum Filter_Mag;
-    
-    // Constructor: Initializes texture properties and generates a texture ID.
-    Texture2D()
-        : Width(0), Height(0),
-          Internal_Format(GL_RGB), Image_Format(GL_RGB),
-          Wrap_S(GL_REPEAT), Wrap_T(GL_REPEAT),
-          Filter_Min(GL_LINEAR_MIPMAP_LINEAR), Filter_Mag(GL_LINEAR)
-    {
-        glGenTextures(1, &ID);
-        Logger::Debug("[Texture2D] Generated texture ID: " + std::to_string(ID));
-    }
-    
-    // Synchronous generation function (not recommended). Use GenerateFromData instead.
-    void Generate(const char* file, bool alpha) {
-        Logger::Warning("[Texture2D::Generate] Synchronous load called. Use GenerateFromData instead.");
-    }
-    
-    // Generates the texture from the provided image data.
-    void GenerateFromData(const FileUtils::ImageData& img, bool alpha) {
-        if (img.data) {
-            Width = img.width;
-            Height = img.height;
-            int desired_channels = alpha ? 4 : 3;
-            GLenum format = (desired_channels == 4) ? GL_RGBA : GL_RGB;
-            
-            if (alpha) {
-                Internal_Format = GL_SRGB_ALPHA;
-                Image_Format = GL_RGBA;
-                Wrap_S = GL_CLAMP_TO_EDGE;
-                Wrap_T = GL_CLAMP_TO_EDGE;
-            } else {
-                Internal_Format = GL_RGB;
-                Image_Format = GL_RGB;
-            }
-            
-            glBindTexture(GL_TEXTURE_2D, ID);
-            glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
-    
-            Logger::Info("[Texture2D::GenerateFromData] Image dimensions: " + std::to_string(Width) + "x" + std::to_string(Height) +
-                         ", Channels: " + std::to_string(desired_channels) + ", Using format: " +
-                         ((format == GL_RGBA) ? "GL_RGBA" : "GL_RGB"));
-            
-            glTexImage2D(GL_TEXTURE_2D, 0, Internal_Format, Width, Height, 0, format, GL_UNSIGNED_BYTE, img.data);
-            GLenum err = glGetError();
-            if (err != GL_NO_ERROR) {
-                Logger::Error("[Texture2D::GenerateFromData] glTexImage2D error: " + std::to_string(err));
-            }
-            
-            glGenerateMipmap(GL_TEXTURE_2D);
-            err = glGetError();
-            if (err != GL_NO_ERROR) {
-                Logger::Error("[Texture2D::GenerateFromData] glGenerateMipmap error: " + std::to_string(err));
-            }
-            
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, Wrap_S);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, Wrap_T);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, Filter_Min);
-            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, Filter_Mag);
-            err = glGetError();
-            if (err != GL_NO_ERROR) {
-                Logger::Error("[Texture2D::GenerateFromData] glTexParameteri error: " + std::to_string(err));
-            }
-            
-            Logger::Info("[Texture2D::GenerateFromData] Texture generated successfully. Texture ID: " + std::to_string(ID));
-            stbi_image_free(img.data);
-        } else {
-            Logger::Error("[Texture2D::GenerateFromData] Image data is null.");
-        }
-    }
-};
-
-#endif // TEXTURE2D_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\UIModule.h
-------------------------------------------------------------
-#ifndef UIMODULE_H
-#define UIMODULE_H
-
-#include "Module.h"
-#include "Logger.h"  // Use Logger for detailed logging
-
-// UIModule is responsible for managing the user interface system (menus, HUD, etc.).
-class UIModule : public Module {
-public:
-    // Initializes the UI system.
-    // Returns true if the initialization was successful.
-    virtual bool Init() override {
-        Logger::Info("[UIModule] UI system initialized.");
-        // Initialize the user interface system (e.g., menus, HUD, etc.).
-        return true;
-    }
-    
-    // Updates the UI system.
-    // 'dt' represents the time delta (in seconds) since the last update.
-    virtual void Update(float dt) override {
-        Logger::Debug("[UIModule] Updating UI (dt = " + std::to_string(dt) + " seconds).");
-    }
-    
-    // Shuts down the UI system and releases any associated resources.
-    virtual void Shutdown() override {
-        Logger::Info("[UIModule] UI system shutdown.");
-    }
-};
-
-#endif // UIMODULE_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\UniformBuffer.h
-------------------------------------------------------------
-#ifndef UNIFORMBUFFER_H
-#define UNIFORMBUFFER_H
-
-#include <glad/glad.h>
-#include <iostream>
-#include "Logger.h"
-
-// UniformBuffer encapsulates an OpenGL Uniform Buffer Object (UBO).
-// It provides methods for generating, binding, setting data, and binding to a specified binding point.
-class UniformBuffer {
-public:
-    unsigned int ID; // The OpenGL ID for the uniform buffer.
-
-    // Constructor: Generates the UBO and logs its creation.
-    UniformBuffer() {
-        glGenBuffers(1, &ID);
-        Logger::Debug("[UniformBuffer] Generated UBO ID: " + std::to_string(ID));
-    }
-
-    // Binds the UBO to the GL_UNIFORM_BUFFER target.
-    void Bind() {
-        glBindBuffer(GL_UNIFORM_BUFFER, ID);
-    }
-
-    // Unbinds any buffer from the GL_UNIFORM_BUFFER target.
-    void Unbind() {
-        glBindBuffer(GL_UNIFORM_BUFFER, 0);
-    }
-
-    // Sets the data for the UBO.
-    // @param size: The size of the data in bytes.
-    // @param data: Pointer to the data to be stored.
-    // @param usage: Usage pattern of the data store (e.g., GL_STATIC_DRAW).
-    void SetData(GLsizeiptr size, const void* data, GLenum usage) {
-        Bind();
-        glBufferData(GL_UNIFORM_BUFFER, size, data, usage);
-        Logger::Info("[UniformBuffer] Data set (size: " + std::to_string(size) + " bytes).");
-        Unbind();
-    }
-
-    // Binds the UBO to a specific binding point.
-    // @param bindingPoint: The binding point to which the UBO is bound.
-    void BindToPoint(GLuint bindingPoint) {
-        glBindBufferBase(GL_UNIFORM_BUFFER, bindingPoint, ID);
-        Logger::Debug("[UniformBuffer] UBO bound to binding point " + std::to_string(bindingPoint));
-    }
-};
-
-#endif // UNIFORMBUFFER_H
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\debug_albedo_fragment.glsl
-------------------------------------------------------------
-// debug_uv_fragment.glsl
-#version 330 core
-in vec2 TexCoords;
-out vec4 FragColor;
-
-void main(){
-    FragColor = vec4(TexCoords, 0.0, 1.0);
-}
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\ground_fragment.glsl
-------------------------------------------------------------
-#version 330 core
-
-in vec2 TexCoords;
-out vec4 FragColor;
-
-uniform sampler2D albedoMap;
-
-void main() {
-    vec4 texColor = texture(albedoMap, TexCoords);
-    // Se asume que la textura tiene el canal alfa correcto para transparencia
-    FragColor = texColor;
-}
-
-------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\pbr_fragment.glsl
 ------------------------------------------------------------
+// Archivo: pbr_fragment.glsl
 #version 330 core
 
 in vec3 FragPos;
@@ -2392,23 +2098,41 @@ in mat3 TBN;
 
 out vec4 FragColor;
 
-uniform sampler2D albedoMap;           // Se espera que esté en sRGB
-uniform sampler2D metallicRoughnessMap;  // En rojo: metallic, en verde: roughness
-uniform sampler2D normalMap;             // Normal map
-uniform bool useMaps;
-uniform vec3 camPos;
+// Declaración de los 10 samplers y un flag para indicar si se usó cada uno.
+uniform sampler2D albedoMap;
+uniform bool hasAlbedo;
+uniform vec4 material_albedoColor;
+uniform sampler2D roughnessMap;
+uniform bool hasRoughness;
+uniform sampler2D metalnessMap;
+uniform bool hasMetalness;
+uniform sampler2D normalMap;
+uniform bool hasNormal;
+uniform sampler2D heightMap;
+uniform bool hasHeight;
+uniform sampler2D aoMap;
+uniform bool hasAO;
+uniform sampler2D specularMap;
+uniform bool hasSpecular;
+uniform sampler2D emissiveMap;
+uniform bool hasEmissive;
+uniform sampler2D glossinessMap;
+uniform bool hasGlossiness;
+uniform sampler2D opacityMap;
+uniform bool hasOpacity;
 
+uniform vec3 camPos;
 uniform vec3 ambientColor;
 
 const float PI = 3.14159265359;
 
-// Estructura para la luz (debe coincidir con la definida en C++)
+// Estructura de luz (debe coincidir con la definida en C++)
 struct Light {
-    vec4 typeAndPadding;   // x: tipo (int), yzw: padding
-    vec4 position;         // xyz: posición, w: padding
-    vec4 direction;        // xyz: dirección, w: padding
-    vec4 colorAndIntensity; // rgb: color, a: intensidad
-    vec4 spotParams;       // x: cutOff, y: outerCutOff, z,w: padding
+    vec4 typeAndPadding;   // typeAndPadding.x contendrá el entero del tipo de luz.
+    vec4 position;         // xyz: posición.
+    vec4 direction;        // xyz: dirección.
+    vec4 colorAndIntensity; // rgb: color, a: intensidad.
+    vec4 spotParams;       // x: cutOff, y: outerCutOff.
 };
 
 layout(std140) uniform LightBlock {
@@ -2444,15 +2168,14 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 void main(){
-    vec4 albedoSample = texture(albedoMap, TexCoords);
+    vec4 albedoSample = hasAlbedo ? texture(albedoMap, TexCoords) : material_albedoColor;
     vec3 albedoColor = albedoSample.rgb;
-    float alpha = albedoSample.a;
+    float alpha = hasOpacity ? texture(opacityMap, TexCoords).r : albedoSample.a;
     
-    float metallic = useMaps ? texture(metallicRoughnessMap, TexCoords).r : 0.0;
-    float roughness = useMaps ? texture(metallicRoughnessMap, TexCoords).g : 1.0;
-    vec3 tangentNormal = useMaps ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
+    float metallic = hasMetalness ? texture(metalnessMap, TexCoords).r : 0.0;
+    float roughness = hasRoughness ? texture(roughnessMap, TexCoords).r : 1.0;
+    vec3 tangentNormal = hasNormal ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
     tangentNormal = tangentNormal * 2.0 - 1.0;
-    // Invertir el canal verde de la normal map (común en algunos assets)
     tangentNormal.y = -tangentNormal.y;
     vec3 N = normalize(TBN * tangentNormal);
     
@@ -2462,44 +2185,58 @@ void main(){
     vec3 result = vec3(0.0);
     
     for (int i = 0; i < 10; ++i) {
-        // Si el tipo es -1, la luz no se usa.
         if (int(lights[i].typeAndPadding.x) == -1) continue;
         
-        vec3 lightPos = lights[i].position.xyz;
-        vec3 L = normalize(lightPos - FragPos);
-        vec3 H = normalize(V + L);
-        float NdotL = max(dot(N, L), 0.0);
-        
-        float NDF = DistributionGGX(N, H, roughness);
-        float G = GeometrySmith(N, V, L, roughness);
-        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-        
-        vec3 numerator = NDF * G * F;
-        float denominator = 4.0 * max(dot(N, V), 0.0) * NdotL + 0.001;
-        vec3 specular = numerator / denominator;
-        
-        vec3 kS = F;
-        vec3 kD = vec3(1.0) - kS;
-        kD *= (1.0 - metallic);
-        
         int lightType = int(lights[i].typeAndPadding.x);
-        if(lightType == 0) { // Luz puntual
-            result += (kD * albedoColor / PI + specular) *
-                      lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL;
-        } else if(lightType == 1) { // Luz focal (spot)
-            float cutOff = lights[i].spotParams.x;
-            float outerCutOff = lights[i].spotParams.y;
+        if(lightType == 0) { // Direccional
+            vec3 L = normalize(-lights[i].direction.xyz);
+            vec3 H = normalize(V + L);
+            float NdotL = max(dot(N, L), 0.0);
+            float NDF = DistributionGGX(N, H, roughness);
+            float G = GeometrySmith(N, V, L, roughness);
+            vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+            vec3 specular = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * NdotL + 0.001);
+            vec3 kS = F;
+            vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+            result += (kD * albedoColor / PI + specular) * lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL;
+        } else if(lightType == 1) { // Puntual
+            vec3 lightPos = lights[i].position.xyz;
+            vec3 L = normalize(lightPos - FragPos);
+            vec3 H = normalize(V + L);
+            float NdotL = max(dot(N, L), 0.0);
+            float NDF = DistributionGGX(N, H, roughness);
+            float G = GeometrySmith(N, V, L, roughness);
+            vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+            vec3 specular = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * NdotL + 0.001);
+            vec3 kS = F;
+            vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+            result += (kD * albedoColor / PI + specular) * lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL;
+        } else if(lightType == 2) { // Foco (Spot)
+            vec3 lightPos = lights[i].position.xyz;
+            vec3 L = normalize(lightPos - FragPos);
+            vec3 H = normalize(V + L);
+            float NdotL = max(dot(N, L), 0.0);
             float theta = dot(L, normalize(-lights[i].direction.xyz));
-            float epsilon = cutOff - outerCutOff;
-            float intensity = clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
-            result += intensity * ((kD * albedoColor / PI + specular) *
-                      lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL);
+            float epsilon = lights[i].spotParams.x - lights[i].spotParams.y;
+            float intensity = clamp((theta - lights[i].spotParams.y) / epsilon, 0.0, 1.0);
+            float NDF = DistributionGGX(N, H, roughness);
+            float G = GeometrySmith(N, V, L, roughness);
+            vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+            vec3 specular = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * NdotL + 0.001);
+            vec3 kS = F;
+            vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
+            result += intensity * ((kD * albedoColor / PI + specular) * lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL);
+        } else if(lightType == 3) { // Ambiental
+            result += lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a;
+        } else if(lightType == 4) { // Emisiva
+            result += lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a;
         }
     }
     
+    // Se añade también una iluminación ambiental global (si se desea)
     result += ambientColor * albedoColor;
     
-    FragColor = vec4(result, alpha);
+    FragColor = vec4(albedoSample.rgb, albedoSample.a);
 }
 
 ------------------------------------------------------------
