@@ -186,27 +186,34 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Light.h
 #define LIGHT_H
 
 #include <glm/glm.hpp>
-#include "Logger.h"
+#include "Logger.h"   // Include Logger for detailed logging output
 #include <string>
 
-// Enumeración de tipos de luz
+// Define light types using an integer:
+// 0: Point light
+// 1: Spot light
+// 2: Directional light (optional)
 enum class LightType : int {
-    DIRECTIONAL = 0,
-    POINT = 1,
-    SPOT = 2,
-    AMBIENT = 3,
-    EMISSIVE = 4
+    POINT = 0,
+    SPOT = 1,
+    DIRECTIONAL = 2
 };
 
-// Declaramos la estructura con alignas(16) para cumplir std140
-struct alignas(16) Light {
-    // typeAndPadding.x contendrá el valor del tipo (almacenado como float)
-    glm::vec4 typeAndPadding;    // x: LightType, yzw: padding
-    glm::vec4 position;          // xyz: posición, w: padding
-    glm::vec4 direction;         // xyz: dirección, w: padding
-    glm::vec4 colorAndIntensity; // rgb: color, a: intensidad
-    glm::vec4 spotParams;        // x: cutOff, y: outerCutOff, z y w: padding
+// Structure to store the information of a light in std140 layout,
+// using vec4 for proper alignment (80 bytes per light).
+struct Light {
+    // Stores the light type in the x component; y, z, w are used as padding.
+    glm::vec4 typeAndPadding;
+    // Position of the light: xyz represents the position and w is used as padding.
+    glm::vec4 position;
+    // Direction of the light: xyz represents the direction and w is used as padding.
+    glm::vec4 direction;
+    // Color and intensity: rgb represents the color, and a represents the intensity.
+    glm::vec4 colorAndIntensity;
+    // Parameters for spot lights: x = cutOff, y = outerCutOff, z and w are used as padding.
+    glm::vec4 spotParams;
 
+    // Logs detailed information about the light's properties.
     inline void LogLightDetails() const {
         Logger::Debug("[Light] Logging light details:");
         Logger::Debug("  Type (stored in x component): " + std::to_string(typeAndPadding.x));
@@ -223,8 +230,9 @@ struct alignas(16) Light {
                       std::to_string(colorAndIntensity.y) + ", " +
                       std::to_string(colorAndIntensity.z) + ")");
         Logger::Debug("  Intensity (stored in w component): " + std::to_string(colorAndIntensity.w));
-        Logger::Debug("  Spot Params: (cutOff: " + std::to_string(spotParams.x) +
-                      ", outerCutOff: " + std::to_string(spotParams.y) + ")");
+        Logger::Debug("  Spot Params: (cutOff: " +
+                      std::to_string(spotParams.x) + ", outerCutOff: " +
+                      std::to_string(spotParams.y) + ")");
     }
 };
 
@@ -404,39 +412,17 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Material.h
 #define MATERIAL_H
 
 #include <memory>
-#include <map>
-#include <glm/glm.hpp>
 #include "Texture2D.h"
-#include "Shader.h"
 
-// Enumeración de los tipos de textura soportados.
-enum class TextureType {
-    ALBEDO,
-    ROUGHNESS,
-    METALNESS,
-    NORMAL,
-    HEIGHT,
-    AO,
-    SPECULAR,
-    EMISSIVE,
-    GLOSSINESS,
-    OPACITY
+struct Material {
+    std::shared_ptr<Texture2D> albedo;
+    std::shared_ptr<Texture2D> metallicRoughness;
+    std::shared_ptr<Texture2D> normal;
+
+    Material() : albedo(nullptr), metallicRoughness(nullptr), normal(nullptr) { }
 };
 
-class Material {
-public:
-    // Mapa que asocia cada tipo de textura a un objeto Texture2D.
-    std::map<TextureType, std::shared_ptr<Texture2D>> textures;
-    
-    // Color base extraído del material (por ejemplo, del baseColorFactor en glTF).
-    // Se usará en el shader cuando no exista una textura de albedo.
-    glm::vec4 baseColor = glm::vec4(1.0f);
-
-    // Aplica el material al shader actual: envía el color base y enlaza las texturas.
-    void Apply(Shader &shader);
-};
-
-#endif // MATERIAL_H
+#endif
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Model.h
@@ -449,19 +435,25 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Model.h
 #include "ModelLoader.h"
 #include "Submesh.h"
 #include "Material.h"
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <glm/glm.hpp>
+#include <iostream>
 #include "ResourceManager.h"
 #include <filesystem>
 #include "Logger.h"
 
-// Función auxiliar para obtener la ruta de una textura desde un aiMaterial.
-// Si se busca BASE_COLOR y no se encuentra, se intenta con DIFFUSE.
+// Global project root (if needed elsewhere)
+extern std::string gProjectRoot;
+
+// Inline helper function to get the texture path from an aiMaterial.
+// If the texture path is relative, this function prepends the model's base directory.
 inline std::string GetTexturePath(aiMaterial* material, aiTextureType type, const std::string& baseDir) {
     aiString str;
-    // Intentamos obtener la textura usando el tipo solicitado.
+    // Attempt to get the texture path for the specified type.
     if (material->GetTexture(type, 0, &str) != AI_SUCCESS) {
-        // Si estamos buscando la textura de albedo, también intentamos con DIFFUSE.
+        // For albedo textures, try DIFFUSE if BASE_COLOR is not found.
         if (type == aiTextureType_BASE_COLOR) {
             if (material->GetTexture(aiTextureType_DIFFUSE, 0, &str) != AI_SUCCESS)
                 return "";
@@ -469,39 +461,42 @@ inline std::string GetTexturePath(aiMaterial* material, aiTextureType type, cons
             return "";
         }
     }
+    std::string relPath(str.C_Str());
+    Logger::Debug("[GetTexturePath] Original path from material: " + relPath);
     
-    std::string texturePath(str.C_Str());
-    Logger::Debug("[GetTexturePath] Texture path from glTF: " + texturePath);
-    
-    std::filesystem::path fsPath(texturePath);
-    // Si la ruta no es absoluta, la combinamos con el directorio base
+    std::filesystem::path fsPath(relPath);
+    // If the texture path is not absolute, convert it using the model's base directory.
     if (!fsPath.is_absolute()) {
-        texturePath = baseDir + "/" + texturePath;
-        Logger::Debug("[GetTexturePath] Combined with base directory: " + texturePath);
+        std::string absPath = baseDir + "/" + relPath;
+        Logger::Debug("[GetTexturePath] Converted to absolute path using model directory: " + absPath);
+        return absPath;
     }
-    
-    return texturePath;
+    return relPath;
 }
 
+// The Model class is responsible for loading a model from a file using Assimp,
+// processing its meshes and materials, and providing a Draw() method to render it.
 class Model {
 public:
+    // A collection of submeshes that make up the model.
     std::vector<Submesh> submeshes;
     
-    // Carga el modelo desde el archivo especificado.
+    // Constructor: Loads a model from the specified file path.
     Model(const std::string &path) {
         Logger::Info("[Model::Model] Loading model from path: " + path);
         loadModel(path);
     }
     
-    // Dibuja el modelo (cada submesh).
+    // Draws the model by drawing each of its submeshes.
     void Draw();
     
 private:
-    // Función que procesa la carga del modelo usando Assimp.
+    // Loads a model from the specified file path using Assimp.
+    // This function processes the scene and populates the submeshes vector.
     void loadModel(const std::string &path);
 };
 
-#endif // MODEL_H
+#endif
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ModelLoader.h
@@ -984,64 +979,40 @@ struct Submesh {
     }
     
     // Draws the submesh by binding the appropriate textures and VAO, then issuing a draw call.
-    // Archivo: Submesh.h (método Draw() actualizado)
-void Draw() {
-    // Se asigna cada tipo de textura a una unidad (0: Albedo, 1: Roughness, 2: Metalness, etc.)
-    if (material.textures.find(TextureType::ALBEDO) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::ALBEDO]->ID);
+    void Draw() {
+        // Bind albedo texture to texture unit 0.
+        if (material.albedo) {
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, material.albedo->ID);
+        }
+        // Bind metallic/roughness texture to texture unit 1.
+        if (material.metallicRoughness) {
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID);
+        }
+        // Bind normal texture to texture unit 2.
+        if (material.normal) {
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_2D, material.normal->ID);
+        }
+        
+        if (VAO == 0) {
+            Logger::Error("[Submesh::Draw] VAO is not configured properly.");
+            return;
+        }
+        if (indices.empty()) {
+            Logger::Warning("[Submesh::Draw] The indices vector is empty.");
+            return;
+        }
+        Logger::Debug("[Submesh::Draw] Drawing submesh with " + std::to_string(indices.size()) + " indices.");
+        glBindVertexArray(VAO);
+        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
+        GLenum err = glGetError();
+        if (err != GL_NO_ERROR) {
+            Logger::Error("[Submesh::Draw] OpenGL error during drawing: " + std::to_string(err));
+        }
+        glBindVertexArray(0);
     }
-    if (material.textures.find(TextureType::ROUGHNESS) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::ROUGHNESS]->ID);
-    }
-    if (material.textures.find(TextureType::METALNESS) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::METALNESS]->ID);
-    }
-    if (material.textures.find(TextureType::NORMAL) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::NORMAL]->ID);
-    }
-    if (material.textures.find(TextureType::HEIGHT) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::HEIGHT]->ID);
-    }
-    if (material.textures.find(TextureType::AO) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::AO]->ID);
-    }
-    if (material.textures.find(TextureType::SPECULAR) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::SPECULAR]->ID);
-    }
-    if (material.textures.find(TextureType::EMISSIVE) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::EMISSIVE]->ID);
-    }
-    if (material.textures.find(TextureType::GLOSSINESS) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE8);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::GLOSSINESS]->ID);
-    }
-    if (material.textures.find(TextureType::OPACITY) != material.textures.end()) {
-        glActiveTexture(GL_TEXTURE9);
-        glBindTexture(GL_TEXTURE_2D, material.textures[TextureType::OPACITY]->ID);
-    }
-
-    if (VAO == 0) {
-        Logger::Error("[Submesh::Draw] VAO is not configured properly.");
-        return;
-    }
-    if (indices.empty()) {
-        Logger::Warning("[Submesh::Draw] The indices vector is empty.");
-        return;
-    }
-    Logger::Debug("[Submesh::Draw] Drawing submesh with " + std::to_string(indices.size()) + " indices.");
-    glBindVertexArray(VAO);
-    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, 0);
-    glBindVertexArray(0);
-}
-
 };
 
 #endif
@@ -1201,14 +1172,12 @@ public:
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 ------------------------------------------------------------
-// Archivo: Main.cpp
-
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
 #include "ResourceManager.h"
 #include "Model.h"
-#include "UniformBuffer.h"
+#include "UniformBuffer.h"   // Used for UBOs
 #include "Camera.h"
 #include "Logger.h"
 #include <glm/glm.hpp>
@@ -1223,7 +1192,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include "LightManager.h"
 #include "PlayerController.h"
 
-// Global: Directorio raíz del proyecto.
+// Global project root
 std::string gProjectRoot;
 
 std::string GetProjectRoot() {
@@ -1238,7 +1207,7 @@ std::string GetProjectRoot() {
     return projectRoot.string();
 }
 
-Camera camera;  // Instancia global de cámara
+Camera camera;  // Global camera instance with its default position and orientation
 
 float deltaTime = 0.0f;
 float lastFrame = 0.0f;
@@ -1248,9 +1217,9 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     Logger::Debug("Framebuffer resized: width = " + std::to_string(width) + ", height = " + std::to_string(height));
 }
 
-// (Opcional) Callback para el movimiento del ratón (en este ejemplo se omite su uso)
+// For this test, the mouse callback is not used so that the camera remains fixed.
 void mouse_callback(GLFWwindow* window, double xpos, double ypos) {
-    // Implementación de control de cámara mediante el ratón si se requiere.
+    // Camera remains fixed; no mouse updates.
 }
 
 int main() {
@@ -1280,7 +1249,8 @@ int main() {
     }
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    // Deshabilitamos el cursor para tener un control personalizado.
+    // Do not set the mouse callback so that the camera stays fixed
+    // glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
@@ -1296,35 +1266,28 @@ int main() {
     std::string vertexShaderPath = gProjectRoot + "/shaders/pbr_vertex.glsl";
     std::string fragmentShaderPath = gProjectRoot + "/shaders/pbr_fragment.glsl";
     std::string modelPath = gProjectRoot + "/assets/car/scene.gltf";
-    std::string porscheModelPath = gProjectRoot + "/assets/porsche/scene.gltf";
-    
-    // Cargamos de forma asíncrona el shader y los modelos.
+    // std::string porscheModelPath = gProjectRoot + "/assets/porsche/scene.gltf";
+
     auto shaderFuture = std::async(std::launch::deferred, [vertexShaderPath, fragmentShaderPath]() {
         return ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "pbr");
     });
     auto modelFuture = std::async(std::launch::deferred, [modelPath]() {
         return ResourceManager::LoadModel(modelPath.c_str(), "car");
     });
-    auto porscheFuture = std::async(std::launch::deferred, [porscheModelPath]() {
-        return ResourceManager::LoadModel(porscheModelPath.c_str(), "porsche");
-    });
-    
+    // auto porscheFuture = std::async(std::launch::deferred, [porscheModelPath]() {
+    //     return ResourceManager::LoadModel(porscheModelPath.c_str(), "porsche");
+    // });
+
     auto pbrShader = shaderFuture.get();
     auto carModel = modelFuture.get();
-    auto porscheModel = porscheFuture.get();
+    // auto porscheModel = porscheFuture.get();
+
     
-    // Configuramos las unidades de textura del shader según el nuevo sistema:
     pbrShader->Use();
     glUniform1i(glGetUniformLocation(pbrShader->ID, "albedoMap"), 0);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "roughnessMap"), 1);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "metalnessMap"), 2);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "normalMap"), 3);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "heightMap"), 4);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "aoMap"), 5);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "specularMap"), 6);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "emissiveMap"), 7);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "glossinessMap"), 8);
-    glUniform1i(glGetUniformLocation(pbrShader->ID, "opacityMap"), 9);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "metallicRoughnessMap"), 1);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "normalMap"), 2);
+    glUniform1i(glGetUniformLocation(pbrShader->ID, "useMaps"), 1);
     
     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f/1080.0f, 0.1f, 100.0f);
     glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
@@ -1333,21 +1296,20 @@ int main() {
     Logger::Info("Main: Setting up scene...");
     std::shared_ptr<Scene> scene = std::make_shared<Scene>();
     std::shared_ptr<ModelNode> carNode = std::make_shared<ModelNode>(carModel);
-    std::shared_ptr<ModelNode> porscheNode = std::make_shared<ModelNode>(porscheModel);
-    
-    // Configuración de las transformaciones de los modelos
+    // std::shared_ptr<ModelNode> porscheNode = std::make_shared<ModelNode>(porscheModel);
+
     carNode->localTransform = glm::mat4(1.0f);
     carNode->localTransform = glm::translate(carNode->localTransform, glm::vec3(0.0f, -1.0f, 0.0f));
     carNode->localTransform = glm::rotate(carNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
     carNode->localTransform = glm::scale(carNode->localTransform, glm::vec3(0.01f));
-    
-    porscheNode->localTransform = glm::mat4(1.0f);
-    porscheNode->localTransform = glm::translate(porscheNode->localTransform, glm::vec3(0.0f, 0.0f, 5.0f));
-    porscheNode->localTransform = glm::rotate(porscheNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-    porscheNode->localTransform = glm::scale(porscheNode->localTransform, glm::vec3(1.0f));
-    
+
+    // porscheNode->localTransform = glm::mat4(1.0f);
+    // porscheNode->localTransform = glm::translate(porscheNode->localTransform, glm::vec3(0.0f, 0.0f, 5.0f));
+    // porscheNode->localTransform = glm::rotate(porscheNode->localTransform, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+    // porscheNode->localTransform = glm::scale(porscheNode->localTransform, glm::vec3(1.0f));
+
     scene->GetRoot()->AddChild(carNode);
-    scene->GetRoot()->AddChild(porscheNode);
+    // scene->GetRoot()->AddChild(porscheNode);
     Logger::Info("Main: Scene setup completed.");
     
     Logger::Info("Main: Creating PlayerController to move the model...");
@@ -1356,18 +1318,16 @@ int main() {
     Logger::Info("Main: Configuring lights using LightManager...");
     LightManager lightManager;
     {
-        // Luz puntual 1
         Light pointLight1 = {};
-        pointLight1.typeAndPadding = glm::vec4(static_cast<int>(LightType::POINT), 0, 0, 0);
+        pointLight1.typeAndPadding = glm::vec4(0, 0, 0, 0);
         pointLight1.position = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
         pointLight1.direction = glm::vec4(0.0f);
         pointLight1.colorAndIntensity = glm::vec4(1.0f, 0.5f, 0.5f, 1.0f);
         pointLight1.spotParams = glm::vec4(0.0f);
         lightManager.AddLight(pointLight1);
     
-        // Luz puntual 2
         Light pointLight2 = {};
-        pointLight2.typeAndPadding = glm::vec4(static_cast<int>(LightType::POINT), 0, 0, 0);
+        pointLight2.typeAndPadding = glm::vec4(0, 0, 0, 0);
         pointLight2.position = glm::vec4(-5.0f, 5.0f, 5.0f, 1.0f);
         pointLight2.direction = glm::vec4(0.0f);
         pointLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -1375,9 +1335,8 @@ int main() {
         lightManager.AddLight(pointLight2);
     }
     {
-        // Luz de foco (spot) 1
         Light spotLight1 = {};
-        spotLight1.typeAndPadding = glm::vec4(static_cast<int>(LightType::SPOT), 0, 0, 0);
+        spotLight1.typeAndPadding = glm::vec4(1, 0, 0, 0);
         spotLight1.position = glm::vec4(0.0f, 5.0f, 0.0f, 1.0f);
         spotLight1.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
         spotLight1.colorAndIntensity = glm::vec4(0.5f, 1.0f, 0.5f, 1.0f);
@@ -1386,9 +1345,8 @@ int main() {
                                            0.0f, 0.0f);
         lightManager.AddLight(spotLight1);
     
-        // Luz de foco (spot) 2
         Light spotLight2 = {};
-        spotLight2.typeAndPadding = glm::vec4(static_cast<int>(LightType::SPOT), 0, 0, 0);
+        spotLight2.typeAndPadding = glm::vec4(1, 0, 0, 0);
         spotLight2.position = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
         spotLight2.direction = glm::vec4(0.0f, -1.0f, -1.0f, 0.0f);
         spotLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 0.5f, 1.0f);
@@ -1397,28 +1355,6 @@ int main() {
                                            0.0f, 0.0f);
         lightManager.AddLight(spotLight2);
     }
-    {
-        // Luz direccional
-        Light directionalLight = {};
-        directionalLight.typeAndPadding = glm::vec4(static_cast<int>(LightType::DIRECTIONAL), 0, 0, 0);
-        directionalLight.direction = glm::vec4(-0.2f, -1.0f, -0.3f, 0.0f);
-        directionalLight.colorAndIntensity = glm::vec4(1.0f, 1.0f, 0.9f, 0.7f);
-        directionalLight.position = glm::vec4(0.0f); // No relevante para luz direccional
-        directionalLight.spotParams = glm::vec4(0.0f);
-        lightManager.AddLight(directionalLight);
-    }
-    {
-        // Luz ambiental
-        Light ambientLight = {};
-        ambientLight.typeAndPadding = glm::vec4(static_cast<int>(LightType::AMBIENT), 0, 0, 0);
-        ambientLight.colorAndIntensity = glm::vec4(0.2f, 0.2f, 0.2f, 1.0f);
-        ambientLight.position = glm::vec4(0.0f);
-        ambientLight.direction = glm::vec4(0.0f);
-        ambientLight.spotParams = glm::vec4(0.0f);
-        lightManager.AddLight(ambientLight);
-    }
-    
-    // Configuración del bloque uniforme para las luces
     unsigned int lightBlockIndex = glGetUniformBlockIndex(pbrShader->ID, "LightBlock");
     if (lightBlockIndex == GL_INVALID_INDEX) {
         Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
@@ -1434,30 +1370,30 @@ int main() {
         lastFrame = currentFrame;
         
         glfwPollEvents();
-        
-        // Cerrar ventana al pulsar ESC
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+
+        // --- Comprobación para cerrar la ventana al pulsar Esc ---
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
             glfwSetWindowShouldClose(window, true);
-        
-        // Actualizar la transformación del modelo mediante el PlayerController
+        }
+        // ------------------------------------------------------------
+
+        // Update the model's transformation using the PlayerController
         playerController.Update(deltaTime);
         
         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         
-        // Actualizar la vista y enviar la posición de la cámara
+        // Use the fixed camera view matrix.
         glm::mat4 view = camera.GetViewMatrix();
         pbrShader->Use();
         glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
         glUniform3fv(glGetUniformLocation(pbrShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
         
-        // Actualizar y enlazar el UBO de luces
         lightManager.UpdateUBO();
         lightManager.lightUBO.BindToPoint(1);
         
-        // Enviar un color ambiental global (opcional)
-        glm::vec3 ambientGlobal = glm::vec3(0.2f);
-        glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientGlobal));
+        glm::vec3 ambientLightColor = glm::vec3(0.2f);
+        glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientLightColor));
         
         scene->Update();
         scene->Render(*pbrShader);
@@ -1474,108 +1410,65 @@ int main() {
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Material.cpp
 ------------------------------------------------------------
-#include "Material.h"
-#include "Shader.h"
-#include "Logger.h"
-#include <glad/glad.h>
+// #include "Material.h"
+// #include "glm/gtc/type_ptr.hpp"
 
-void Material::Apply(Shader &shader) {
-    // Activa el shader.
-    shader.Use();
+// Material::Material()
+//     : albedoColor(1.0f), metalness(0.0f), roughness(1.0f), ao(1.0f),
+//       isTransparent(false)
+// {
+//     Logger::Debug("[Material] Default material created.");
+// }
 
-    // Envia el color base (baseColorFactor) al shader, siempre.
-    glUniform4fv(glGetUniformLocation(shader.ID, "material_albedoColor"), 1, &baseColor[0]);
+// void Material::Apply(const Shader &shader) const {
+//     int loc = glGetUniformLocation(shader.ID, "material_isTransparent");
+//     if (loc == -1) {
+//         Logger::Warning("[Material::Apply] Uniform 'material_isTransparent' not found.");
+//     } else {
+//         glUniform1i(loc, isTransparent ? 1 : 0);
+//     }
 
-    // ALBEDO (unidad 0)
-    if (textures.find(TextureType::ALBEDO) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasAlbedo"), 1);
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::ALBEDO)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasAlbedo"), 0);
-    }
+//     bool useAlbedoMap = (albedoMap != nullptr);
+//     bool useNormalMap = (normalMap != nullptr);
+//     bool useMRMap = (metallicRoughnessMap != nullptr);
+//     bool useAOMap = (aoMap != nullptr);
 
-    // ROUGHNESS (unidad 1)
-    if (textures.find(TextureType::ROUGHNESS) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasRoughness"), 1);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::ROUGHNESS)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasRoughness"), 0);
-    }
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useAlbedoMap"), useAlbedoMap ? 1 : 0);
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useNormalMap"), useNormalMap ? 1 : 0);
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useMetallicRoughnessMap"), useMRMap ? 1 : 0);
+//     glUniform1i(glGetUniformLocation(shader.ID, "material_useAOMap"), useAOMap ? 1 : 0);
 
-    // METALNESS (unidad 2)
-    if (textures.find(TextureType::METALNESS) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasMetalness"), 1);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::METALNESS)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasMetalness"), 0);
-    }
-
-    // NORMAL (unidad 3)
-    if (textures.find(TextureType::NORMAL) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasNormal"), 1);
-        glActiveTexture(GL_TEXTURE3);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::NORMAL)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasNormal"), 0);
-    }
-
-    // HEIGHT (unidad 4)
-    if (textures.find(TextureType::HEIGHT) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasHeight"), 1);
-        glActiveTexture(GL_TEXTURE4);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::HEIGHT)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasHeight"), 0);
-    }
-
-    // AO (unidad 5)
-    if (textures.find(TextureType::AO) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasAO"), 1);
-        glActiveTexture(GL_TEXTURE5);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::AO)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasAO"), 0);
-    }
-
-    // SPECULAR (unidad 6)
-    if (textures.find(TextureType::SPECULAR) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasSpecular"), 1);
-        glActiveTexture(GL_TEXTURE6);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::SPECULAR)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasSpecular"), 0);
-    }
-
-    // EMISSIVE (unidad 7)
-    if (textures.find(TextureType::EMISSIVE) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasEmissive"), 1);
-        glActiveTexture(GL_TEXTURE7);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::EMISSIVE)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasEmissive"), 0);
-    }
-
-    // GLOSSINESS (unidad 8)
-    if (textures.find(TextureType::GLOSSINESS) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasGlossiness"), 1);
-        glActiveTexture(GL_TEXTURE8);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::GLOSSINESS)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasGlossiness"), 0);
-    }
-
-    // OPACITY (unidad 9)
-    if (textures.find(TextureType::OPACITY) != textures.end()) {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasOpacity"), 1);
-        glActiveTexture(GL_TEXTURE9);
-        glBindTexture(GL_TEXTURE_2D, textures.at(TextureType::OPACITY)->ID);
-    } else {
-        glUniform1i(glGetUniformLocation(shader.ID, "hasOpacity"), 0);
-    }
-}
+//     int textureUnit = 0;
+//     if (useAlbedoMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, albedoMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "albedoMap"), textureUnit);
+//         textureUnit++;
+//     }
+//     if (useNormalMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, normalMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "normalMap"), textureUnit);
+//         textureUnit++;
+//     }
+//     if (useMRMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, metallicRoughnessMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "metallicRoughnessMap"), textureUnit);
+//         textureUnit++;
+//     }
+//     if (useAOMap) {
+//         glActiveTexture(GL_TEXTURE0 + textureUnit);
+//         glBindTexture(GL_TEXTURE_2D, aoMap->ID);
+//         glUniform1i(glGetUniformLocation(shader.ID, "aoMap"), textureUnit);
+//         textureUnit++;
+//     }
+    
+//     glUniform3fv(glGetUniformLocation(shader.ID, "material_albedoColor"), 1, glm::value_ptr(albedoColor));
+//     glUniform1f(glGetUniformLocation(shader.ID, "material_metalness"), metalness);
+//     glUniform1f(glGetUniformLocation(shader.ID, "material_roughness"), roughness);
+//     glUniform1f(glGetUniformLocation(shader.ID, "material_ao"), ao);
+// }
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.cpp
@@ -1595,7 +1488,7 @@ void Model::loadModel(const std::string &path) {
     Logger::Info("[Model::loadModel] Starting model load: " + path);
     
     Assimp::Importer importer;
-    // Se especifican procesos para triangulación, volteo de UVs y cálculo de tangentes.
+    // Read the model file with triangulation, flipped UVs, and tangent space calculation.
     const aiScene* scene = importer.ReadFile(path, 
         aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
     
@@ -1605,41 +1498,48 @@ void Model::loadModel(const std::string &path) {
         return;
     }
     
+    // Extract the model's base directory for locating textures.
     std::filesystem::path modelFilePath(path);
     std::string modelDir = modelFilePath.parent_path().generic_string();
     Logger::Info("[Model::loadModel] Model base directory: " + modelDir);
     
-    // Procesa cada mesh de la escena.
+    // Process each mesh in the scene.
     for (unsigned int i = 0; i < scene->mNumMeshes; i++) {
         aiMesh* mesh = scene->mMeshes[i];
         Submesh submesh;
         Logger::Info("[Model::loadModel] Processing mesh " + std::to_string(i) +
                      " with " + std::to_string(mesh->mNumVertices) + " vertices.");
         
-        // Procesar vértices
+        // Process mesh vertices.
         for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
             Vertex vertex;
             vertex.Position = glm::vec3(mesh->mVertices[j].x,
                                         mesh->mVertices[j].y,
                                         mesh->mVertices[j].z);
             if (mesh->HasNormals()) {
-                vertex.Normal = glm::vec3(mesh->mNormals[j].x,
-                                          mesh->mNormals[j].y,
-                                          mesh->mNormals[j].z);
+                vertex.Normal = glm::normalize(glm::vec3(mesh->mNormals[j].x,
+                                                         mesh->mNormals[j].y,
+                                                         mesh->mNormals[j].z));
+            } else {
+                vertex.Normal = glm::vec3(0.0f);
             }
             if (mesh->HasTextureCoords(0)) {
                 vertex.TexCoords = glm::vec2(mesh->mTextureCoords[0][j].x,
                                              mesh->mTextureCoords[0][j].y);
+            } else {
+                vertex.TexCoords = glm::vec2(0.0f, 0.0f);
             }
             if (mesh->HasTangentsAndBitangents()) {
-                vertex.Tangent = glm::vec3(mesh->mTangents[j].x,
-                                           mesh->mTangents[j].y,
-                                           mesh->mTangents[j].z);
+                vertex.Tangent = glm::normalize(glm::vec3(mesh->mTangents[j].x,
+                                                          mesh->mTangents[j].y,
+                                                          mesh->mTangents[j].z));
+            } else {
+                vertex.Tangent = glm::vec3(0.0f);
             }
             submesh.vertices.push_back(vertex);
         }
         
-        // Procesar índices
+        // Process mesh faces (indices).
         for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
             aiFace face = mesh->mFaces[j];
             for (unsigned int k = 0; k < face.mNumIndices; k++) {
@@ -1650,45 +1550,43 @@ void Model::loadModel(const std::string &path) {
         Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) +
                      " has " + std::to_string(mesh->mNumFaces) + " faces.");
         
-        // Procesar materiales y texturas
+        // Process materials and textures.
         if (scene->HasMaterials()) {
             aiMaterial* material = scene->mMaterials[mesh->mMaterialIndex];
-            auto& texMap = submesh.material.textures;
             
-            // Intentar obtener la textura de albedo probando varios tipos:
+            // Attempt to get the albedo texture path (first trying BASE_COLOR, then DIFFUSE).
             std::string albedoPath = GetTexturePath(material, aiTextureType_BASE_COLOR, modelDir);
             if (albedoPath.empty())
                 albedoPath = GetTexturePath(material, aiTextureType_DIFFUSE, modelDir);
-            if (albedoPath.empty())
-                albedoPath = GetTexturePath(material, aiTextureType_UNKNOWN, modelDir);
-            if (!albedoPath.empty()){
+            if (!albedoPath.empty()) {
                 Logger::Info("[Model::loadModel] Loading albedo texture: " + albedoPath);
-                texMap[TextureType::ALBEDO] = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
+                submesh.material.albedo = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
             } else {
-                Logger::Warning("[Model::loadModel] No albedo texture found for mesh " + std::to_string(i));
-                // Si no se encontró textura, extrae el baseColorFactor (usualmente se encuentra en AI_MATKEY_COLOR_DIFFUSE)
-                aiColor4D colorFactor;
-                if (AI_SUCCESS == aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &colorFactor)) {
-                    submesh.material.baseColor = glm::vec4(colorFactor.r, colorFactor.g, colorFactor.b, colorFactor.a);
-                    Logger::Info("[Model::loadModel] Using baseColorFactor for mesh " + std::to_string(i));
-                } else {
-                    submesh.material.baseColor = glm::vec4(1.0f);
-                }
+                Logger::Warning("[Model::loadModel] No albedo texture path found for mesh " + std::to_string(i));
             }
             
-            // Procesar las demás texturas (NORMAL, METALNESS, ROUGHNESS, etc.) de forma similar…
-            // Por ejemplo, para la textura normal:
+            // Attempt to load the normal texture.
             std::string normalPath = GetTexturePath(material, aiTextureType_NORMALS, modelDir);
-            if (!normalPath.empty()){
+            if (!normalPath.empty()) {
                 Logger::Info("[Model::loadModel] Loading normal texture: " + normalPath);
-                texMap[TextureType::NORMAL] = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
+                submesh.material.normal = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
             } else {
-                Logger::Warning("[Model::loadModel] No normal texture found for mesh " + std::to_string(i));
+                Logger::Warning("[Model::loadModel] No normal texture path found for mesh " + std::to_string(i));
             }
-            // Y así para METALNESS, ROUGHNESS, etc.
+            
+            // Attempt to load the metallic/roughness texture (try UNKNOWN first, then SPECULAR).
+            std::string mrPath = GetTexturePath(material, aiTextureType_UNKNOWN, modelDir);
+            if (mrPath.empty())
+                mrPath = GetTexturePath(material, aiTextureType_SPECULAR, modelDir);
+            if (!mrPath.empty()) {
+                Logger::Info("[Model::loadModel] Loading metallic/roughness texture: " + mrPath);
+                submesh.material.metallicRoughness = ResourceManager::LoadTexture(mrPath.c_str(), false, mrPath);
+            } else {
+                Logger::Warning("[Model::loadModel] No metallic/roughness texture path found for mesh " + std::to_string(i));
+            }
         }
         
-        // Configura la malla (crea VAO, VBO, EBO, etc.)
+        // Setup the mesh (upload buffers, etc.).
         submesh.setupMesh();
         Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) + " loaded: " +
                      std::to_string(submesh.vertices.size()) + " vertices, " +
@@ -1701,6 +1599,8 @@ void Model::loadModel(const std::string &path) {
 
 void Model::Draw() {
     Logger::Info("[Model::Draw] Drawing model with " + std::to_string(submeshes.size()) + " submeshes.");
+    
+    // Iterate over submeshes and draw each one if it has valid data.
     for (size_t i = 0; i < submeshes.size(); ++i) {
         if (submeshes[i].vertices.empty() || submeshes[i].indices.empty()) {
             Logger::Warning("[Model::Draw] Submesh " + std::to_string(i) + " has invalid data. Skipping draw.");
@@ -2087,9 +1987,36 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\stb_image.cpp
 #include "stb_image.h"
 
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\debug_albedo_fragment.glsl
+------------------------------------------------------------
+// debug_uv_fragment.glsl
+#version 330 core
+in vec2 TexCoords;
+out vec4 FragColor;
+
+void main(){
+    FragColor = vec4(TexCoords, 0.0, 1.0);
+}
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\ground_fragment.glsl
+------------------------------------------------------------
+#version 330 core
+
+in vec2 TexCoords;
+out vec4 FragColor;
+
+uniform sampler2D albedoMap;
+
+void main() {
+    vec4 texColor = texture(albedoMap, TexCoords);
+    // Se asume que la textura tiene el canal alfa correcto para transparencia
+    FragColor = texColor;
+}
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\pbr_fragment.glsl
 ------------------------------------------------------------
-// Archivo: pbr_fragment.glsl
 #version 330 core
 
 in vec3 FragPos;
@@ -2098,41 +2025,23 @@ in mat3 TBN;
 
 out vec4 FragColor;
 
-// Declaración de los 10 samplers y un flag para indicar si se usó cada uno.
-uniform sampler2D albedoMap;
-uniform bool hasAlbedo;
-uniform vec4 material_albedoColor;
-uniform sampler2D roughnessMap;
-uniform bool hasRoughness;
-uniform sampler2D metalnessMap;
-uniform bool hasMetalness;
-uniform sampler2D normalMap;
-uniform bool hasNormal;
-uniform sampler2D heightMap;
-uniform bool hasHeight;
-uniform sampler2D aoMap;
-uniform bool hasAO;
-uniform sampler2D specularMap;
-uniform bool hasSpecular;
-uniform sampler2D emissiveMap;
-uniform bool hasEmissive;
-uniform sampler2D glossinessMap;
-uniform bool hasGlossiness;
-uniform sampler2D opacityMap;
-uniform bool hasOpacity;
-
+uniform sampler2D albedoMap;           // Se espera que esté en sRGB
+uniform sampler2D metallicRoughnessMap;  // En rojo: metallic, en verde: roughness
+uniform sampler2D normalMap;             // Normal map
+uniform bool useMaps;
 uniform vec3 camPos;
+
 uniform vec3 ambientColor;
 
 const float PI = 3.14159265359;
 
-// Estructura de luz (debe coincidir con la definida en C++)
+// Estructura para la luz (debe coincidir con la definida en C++)
 struct Light {
-    vec4 typeAndPadding;   // typeAndPadding.x contendrá el entero del tipo de luz.
-    vec4 position;         // xyz: posición.
-    vec4 direction;        // xyz: dirección.
-    vec4 colorAndIntensity; // rgb: color, a: intensidad.
-    vec4 spotParams;       // x: cutOff, y: outerCutOff.
+    vec4 typeAndPadding;   // x: tipo (int), yzw: padding
+    vec4 position;         // xyz: posición, w: padding
+    vec4 direction;        // xyz: dirección, w: padding
+    vec4 colorAndIntensity; // rgb: color, a: intensidad
+    vec4 spotParams;       // x: cutOff, y: outerCutOff, z,w: padding
 };
 
 layout(std140) uniform LightBlock {
@@ -2168,14 +2077,15 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness) {
 }
 
 void main(){
-    vec4 albedoSample = hasAlbedo ? texture(albedoMap, TexCoords) : material_albedoColor;
+    vec4 albedoSample = texture(albedoMap, TexCoords);
     vec3 albedoColor = albedoSample.rgb;
-    float alpha = hasOpacity ? texture(opacityMap, TexCoords).r : albedoSample.a;
+    float alpha = albedoSample.a;
     
-    float metallic = hasMetalness ? texture(metalnessMap, TexCoords).r : 0.0;
-    float roughness = hasRoughness ? texture(roughnessMap, TexCoords).r : 1.0;
-    vec3 tangentNormal = hasNormal ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
+    float metallic = useMaps ? texture(metallicRoughnessMap, TexCoords).r : 0.0;
+    float roughness = useMaps ? texture(metallicRoughnessMap, TexCoords).g : 1.0;
+    vec3 tangentNormal = useMaps ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
     tangentNormal = tangentNormal * 2.0 - 1.0;
+    // Invertir el canal verde de la normal map (común en algunos assets)
     tangentNormal.y = -tangentNormal.y;
     vec3 N = normalize(TBN * tangentNormal);
     
@@ -2185,58 +2095,44 @@ void main(){
     vec3 result = vec3(0.0);
     
     for (int i = 0; i < 10; ++i) {
+        // Si el tipo es -1, la luz no se usa.
         if (int(lights[i].typeAndPadding.x) == -1) continue;
         
+        vec3 lightPos = lights[i].position.xyz;
+        vec3 L = normalize(lightPos - FragPos);
+        vec3 H = normalize(V + L);
+        float NdotL = max(dot(N, L), 0.0);
+        
+        float NDF = DistributionGGX(N, H, roughness);
+        float G = GeometrySmith(N, V, L, roughness);
+        vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
+        
+        vec3 numerator = NDF * G * F;
+        float denominator = 4.0 * max(dot(N, V), 0.0) * NdotL + 0.001;
+        vec3 specular = numerator / denominator;
+        
+        vec3 kS = F;
+        vec3 kD = vec3(1.0) - kS;
+        kD *= (1.0 - metallic);
+        
         int lightType = int(lights[i].typeAndPadding.x);
-        if(lightType == 0) { // Direccional
-            vec3 L = normalize(-lights[i].direction.xyz);
-            vec3 H = normalize(V + L);
-            float NdotL = max(dot(N, L), 0.0);
-            float NDF = DistributionGGX(N, H, roughness);
-            float G = GeometrySmith(N, V, L, roughness);
-            vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-            vec3 specular = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * NdotL + 0.001);
-            vec3 kS = F;
-            vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
-            result += (kD * albedoColor / PI + specular) * lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL;
-        } else if(lightType == 1) { // Puntual
-            vec3 lightPos = lights[i].position.xyz;
-            vec3 L = normalize(lightPos - FragPos);
-            vec3 H = normalize(V + L);
-            float NdotL = max(dot(N, L), 0.0);
-            float NDF = DistributionGGX(N, H, roughness);
-            float G = GeometrySmith(N, V, L, roughness);
-            vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-            vec3 specular = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * NdotL + 0.001);
-            vec3 kS = F;
-            vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
-            result += (kD * albedoColor / PI + specular) * lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL;
-        } else if(lightType == 2) { // Foco (Spot)
-            vec3 lightPos = lights[i].position.xyz;
-            vec3 L = normalize(lightPos - FragPos);
-            vec3 H = normalize(V + L);
-            float NdotL = max(dot(N, L), 0.0);
+        if(lightType == 0) { // Luz puntual
+            result += (kD * albedoColor / PI + specular) *
+                      lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL;
+        } else if(lightType == 1) { // Luz focal (spot)
+            float cutOff = lights[i].spotParams.x;
+            float outerCutOff = lights[i].spotParams.y;
             float theta = dot(L, normalize(-lights[i].direction.xyz));
-            float epsilon = lights[i].spotParams.x - lights[i].spotParams.y;
-            float intensity = clamp((theta - lights[i].spotParams.y) / epsilon, 0.0, 1.0);
-            float NDF = DistributionGGX(N, H, roughness);
-            float G = GeometrySmith(N, V, L, roughness);
-            vec3 F = fresnelSchlick(max(dot(H, V), 0.0), F0);
-            vec3 specular = (NDF * G * F) / (4.0 * max(dot(N, V), 0.0) * NdotL + 0.001);
-            vec3 kS = F;
-            vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
-            result += intensity * ((kD * albedoColor / PI + specular) * lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL);
-        } else if(lightType == 3) { // Ambiental
-            result += lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a;
-        } else if(lightType == 4) { // Emisiva
-            result += lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a;
+            float epsilon = cutOff - outerCutOff;
+            float intensity = clamp((theta - outerCutOff) / epsilon, 0.0, 1.0);
+            result += intensity * ((kD * albedoColor / PI + specular) *
+                      lights[i].colorAndIntensity.rgb * lights[i].colorAndIntensity.a * NdotL);
         }
     }
     
-    // Se añade también una iluminación ambiental global (si se desea)
     result += ambientColor * albedoColor;
     
-    FragColor = vec4(albedoSample.rgb, albedoSample.a);
+    FragColor = vec4(result, alpha);
 }
 
 ------------------------------------------------------------
