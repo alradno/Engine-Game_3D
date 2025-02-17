@@ -83,7 +83,11 @@
         "unordered_set": "cpp",
         "variant": "cpp",
         "xhash": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "bitset": "cpp",
+        "coroutine": "cpp",
+        "resumable": "cpp",
+        "valarray": "cpp"
     },
     "C_Cpp.default.cppStandard": "c++23"
 }

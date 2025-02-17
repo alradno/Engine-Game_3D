@@ -17,6 +17,15 @@
 #include "Logger.h"
 #include <glm/gtc/type_ptr.hpp>
 
+// Helper function: returns true if the given path is non-empty and has a file extension.
+bool isValidTexturePath(const std::string &path)
+{
+    if (path.empty())
+        return false;
+    std::filesystem::path p(path);
+    return p.has_extension();
+}
+
 void Model::loadModel(const std::string &path)
 {
     Logger::Info("[Model::loadModel] Starting load: " + path);
@@ -87,70 +96,70 @@ void Model::loadModel(const std::string &path)
             std::string albedoPath = GetTexturePath(material, aiTextureType_BASE_COLOR, modelDir);
             if (albedoPath.empty())
                 albedoPath = GetTexturePath(material, aiTextureType_DIFFUSE, modelDir);
-            if (!albedoPath.empty())
+            if (isValidTexturePath(albedoPath))
             {
                 Logger::Info("[Model::loadModel] Loading albedo texture: " + albedoPath);
                 submesh.material.albedo = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
             }
             else
             {
-                Logger::Debug("[Model::loadModel] No albedo texture specified for mesh " + std::to_string(i));
+                Logger::Debug("[Model::loadModel] No valid albedo texture specified for mesh " + std::to_string(i));
             }
 
             // NORMAL MAP
             std::string normalPath = GetTexturePath(material, aiTextureType_NORMALS, modelDir);
-            if (!normalPath.empty())
+            if (isValidTexturePath(normalPath))
             {
                 Logger::Info("[Model::loadModel] Loading normal texture: " + normalPath);
                 submesh.material.normal = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
             }
             else
             {
-                Logger::Debug("[Model::loadModel] No normal texture specified for mesh " + std::to_string(i));
+                Logger::Debug("[Model::loadModel] No valid normal texture specified for mesh " + std::to_string(i));
             }
 
             // METALLIC/ROUGHNESS TEXTURE (try UNKNOWN then SPECULAR)
             std::string mrPath = GetTexturePath(material, aiTextureType_UNKNOWN, modelDir);
             if (mrPath.empty())
                 mrPath = GetTexturePath(material, aiTextureType_SPECULAR, modelDir);
-            if (!mrPath.empty())
+            if (isValidTexturePath(mrPath))
             {
                 Logger::Info("[Model::loadModel] Loading metallic/roughness texture: " + mrPath);
                 submesh.material.metallicRoughness = ResourceManager::LoadTexture(mrPath.c_str(), false, mrPath);
             }
             else
             {
-                Logger::Debug("[Model::loadModel] No metallic/roughness texture specified for mesh " + std::to_string(i));
+                Logger::Debug("[Model::loadModel] No valid metallic/roughness texture specified for mesh " + std::to_string(i));
             }
 
             // OCCLUSION TEXTURE (try LIGHTMAP then AMBIENT)
             std::string occlusionPath = GetTexturePath(material, aiTextureType_LIGHTMAP, modelDir);
             if (occlusionPath.empty())
                 occlusionPath = GetTexturePath(material, aiTextureType_AMBIENT, modelDir);
-            if (!occlusionPath.empty())
+            if (isValidTexturePath(occlusionPath))
             {
                 Logger::Info("[Model::loadModel] Loading occlusion texture: " + occlusionPath);
                 submesh.material.occlusion = ResourceManager::LoadTexture(occlusionPath.c_str(), false, occlusionPath);
             }
             else
             {
-                Logger::Debug("[Model::loadModel] No occlusion texture specified for mesh " + std::to_string(i));
+                Logger::Debug("[Model::loadModel] No valid occlusion texture specified for mesh " + std::to_string(i));
             }
 
             // EMISSIVE TEXTURE
             std::string emissivePath = GetTexturePath(material, aiTextureType_EMISSIVE, modelDir);
-            if (!emissivePath.empty())
+            if (isValidTexturePath(emissivePath))
             {
                 Logger::Info("[Model::loadModel] Loading emissive texture: " + emissivePath);
                 submesh.material.emissive = ResourceManager::LoadTexture(emissivePath.c_str(), false, emissivePath);
             }
             else
             {
-                Logger::Debug("[Model::loadModel] No emissive texture specified for mesh " + std::to_string(i));
+                Logger::Debug("[Model::loadModel] No valid emissive texture specified for mesh " + std::to_string(i));
             }
 
             // Extract material factors
-            // Base Color Factor
+            // Base Color Factor from diffuse color
             aiColor4D diffuseColor;
             if (AI_SUCCESS == aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuseColor))
             {

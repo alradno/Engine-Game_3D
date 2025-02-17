@@ -9,9 +9,12 @@ public:
     glm::vec3 Position{0.0f, 2.0f, 5.0f};
     glm::vec3 Front{0.0f, 0.0f, -1.0f};
     glm::vec3 Up{0.0f, 1.0f, 0.0f};
-    float Yaw{-90.0f};
+    float Yaw{0.0f};
     float Pitch{0.0f};
     float MouseSensitivity{0.1f};
+
+    // Nueva bandera para evitar que la cámara se actualice con input.
+    bool fixedCamera = true;
 
     Camera() {
         Logger::Info("[Camera] Default constructor");
@@ -29,7 +32,9 @@ public:
         return glm::lookAt(Position, Position + Front, Up);
     }
     
+    // Procesamiento del teclado: si la cámara está en modo fijo, no se actualiza.
     void ProcessKeyboard(char direction, float deltaTime) {
+        if (fixedCamera) return;
         float velocity = 2.5f * deltaTime;
         if (direction == 'W') {
             Position += Front * velocity;
@@ -48,7 +53,9 @@ public:
         }
     }
     
+    // Procesamiento del movimiento del mouse: si la cámara está fija, no se actualiza.
     void ProcessMouseMovement(float xoffset, float yoffset) {
+        if (fixedCamera) return;
         xoffset *= MouseSensitivity;
         yoffset *= MouseSensitivity;
         Yaw += xoffset;

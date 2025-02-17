@@ -1,0 +1,13 @@
+entities:
+  - transform:
+      translation: [0.0, 0.0, 0.0]
+      rotation: [-90.0, 180.0, 0.0]
+      scale: [0.02, 0.02, 0.02]
+    render:
+      model: "C:/Users/Alberto/Desktop/Proyecto_Tox/assets/car/scene.gltf"
+  # - transform:
+  #     translation: [2.0, 0.0, 1.0]
+  #     rotation: [0.0, 45.0, 0.0]
+  #     scale: [1.0, 1.0, 1.0]
+  #   render:
+  #     model: "C:/Users/Alberto/Desktop/Proyecto_Tox/assets/porsche/scene.gltf"

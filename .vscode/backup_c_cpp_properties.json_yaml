@@ -5,8 +5,7 @@
       "includePath": [
         "${workspaceFolder}/src/**",
         "${workspaceFolder}/libs/**",
-        "${workspaceFolder}/include/**",
-        "${workspaceFolder}/libs/yaml/include"
+        "${workspaceFolder}/include/**"
       ],
       "defines": [
         "_DEBUG",

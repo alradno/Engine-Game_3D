@@ -15,11 +15,13 @@ endif()
 add_executable(Toxic
     ${CMAKE_SOURCE_DIR}/src/Main.cpp
     ${CMAKE_SOURCE_DIR}/libs/glad/src/glad.c
+    ${CMAKE_SOURCE_DIR}/src/ModelLoader.cpp
     ${CMAKE_SOURCE_DIR}/src/ResourceManager.cpp
     ${CMAKE_SOURCE_DIR}/src/stb_image.cpp
     ${CMAKE_SOURCE_DIR}/src/Model.cpp
-    ${CMAKE_SOURCE_DIR}/src/EntityLoader.cpp
-    ${CMAKE_SOURCE_DIR}/src/ModelLoader.cpp
+    ${CMAKE_SOURCE_DIR}/src/Material.cpp
+    ${CMAKE_SOURCE_DIR}/src/PlayerController.cpp
+    ${CMAKE_SOURCE_DIR}/src/ModelLoaderHelper.cpp
 )
 
 # Specify the include directories for Toxic.
@@ -31,7 +33,6 @@ target_include_directories(Toxic PRIVATE
     ${CMAKE_SOURCE_DIR}/libs/stb/include
     ${CMAKE_SOURCE_DIR}/libs/glm/include
     ${CMAKE_SOURCE_DIR}/include
-    ${CMAKE_SOURCE_DIR}/libs/yaml/include
 )
 
 # Link the necessary libraries for Toxic.
@@ -41,10 +42,7 @@ target_link_libraries(Toxic PRIVATE
     gdi32
     ${CMAKE_SOURCE_DIR}/libs/glfw/lib/glfw3.lib
     ${CMAKE_SOURCE_DIR}/libs/glm/lib/glm.lib
-    ${CMAKE_SOURCE_DIR}/libs/yaml/lib/yaml-cpp.lib
 )
-
-target_compile_definitions(Toxic PRIVATE YAML_CPP_STATIC_DEFINE)
 
 # On Windows, copy the Assimp DLL to the executable directory after compilation.
 if(WIN32)
@@ -55,4 +53,3 @@ if(WIN32)
         COMMENT "Copying Assimp DLL to the executable directory"
     )
 endif()
-
