@@ -1,6 +1,6 @@
 /**
  * @file Logger.h
- * @brief Logger singleton that writes logs to a main file (all messages) as well as separate files for INFO, DEBUG, and ERROR messages.
+ * @brief Logger singleton that writes logs to a main file (all messages) as well as separate files for INFO, DEBUG, WARNING, and ERROR messages.
  */
 
 #pragma once
@@ -29,7 +29,7 @@ public:
     }
 
     /**
-     * @brief Sets the main log file and automatically creates three additional log files for INFO, DEBUG, and ERROR messages.
+     * @brief Sets the main log file and automatically creates additional log files for INFO, DEBUG, WARNING, and ERROR messages.
      * @param filename The name of the main log file.
      */
     static void SetLogFile(const std::string &filename)
@@ -65,6 +65,10 @@ public:
         if (!instance().debugFile.is_open())
             std::cerr << "[Logger] ERROR: Could not open debug log file." << std::endl;
 
+        instance().warningFile.open(getSuffixLogFileName(filename, "warning"), std::ios::out | std::ios::trunc);
+        if (!instance().warningFile.is_open())
+            std::cerr << "[Logger] ERROR: Could not open warning log file." << std::endl;
+
         instance().errorFile.open(getSuffixLogFileName(filename, "error"), std::ios::out | std::ios::trunc);
         if (!instance().errorFile.is_open())
             std::cerr << "[Logger] ERROR: Could not open error log file." << std::endl;
@@ -95,6 +99,7 @@ private:
     std::ofstream logFile;
     std::ofstream infoFile;
     std::ofstream debugFile;
+    std::ofstream warningFile; // Archivo exclusivo para warnings
     std::ofstream errorFile;
     std::mutex mutex_;
 
@@ -156,6 +161,11 @@ private:
         {
             debugFile << finalMsg;
             debugFile.flush();
+        }
+        if (level == LogLevel::WARNING && warningFile.is_open())
+        {
+            warningFile << finalMsg;
+            warningFile.flush();
         }
         if (level == LogLevel::ERROR && errorFile.is_open())
         {

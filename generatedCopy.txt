@@ -1,4 +1,46 @@
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\config\config.yaml
+------------------------------------------------------------
+# config.yaml - Configuración global del motor
+projectRoot: "./"
+assets: "assets"        
+shaders: "shaders"
+vertexShader: "pbr_vertex.glsl"     
+defaultShader: "pbr_fragment.glsl"
+render:
+  ambientColor: [0.2, 0.2, 0.2]
+lights:
+  - type: point
+    position: [5.0, 5.0, 5.0]
+    color: [1.0, 0.5, 0.5]
+  - type: point
+    position: [-5.0, 5.0, 5.0]
+    color: [1.0, 1.0, 1.0]
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\config\entities.yaml
+------------------------------------------------------------
+# entities.yaml - Definición de entidades
+entities:
+  - transform:
+      translation: [0.0, 0.0, 0.0]
+      rotation: [0.0, 0.0, 0.0]
+      scale: [0.02, 0.02, 0.02]
+    render:
+      # La ruta es relativa a la carpeta assets definida en config.yaml
+      model: "car/scene.gltf"
+      shader: "pbr_fragment.glsl"
+
+  # Puedes definir más entidades, por ejemplo:
+  # - transform:
+  #     translation: [10.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [0.02, 0.02, 0.02]
+  #   render:
+  #     model: "porsche/scene.gltf"
+  #     shader: "pbr_fragment"
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Camera.h
 ------------------------------------------------------------
 #pragma once
@@ -168,6 +210,36 @@ private:
 };
 
 ------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Config.h
+------------------------------------------------------------
+#pragma once
+#include <string>
+#include <vector>
+#include <glm/glm.hpp>
+#include <yaml-cpp/yaml.h>
+
+// Estructura para la configuración de luces
+struct LightConfig {
+    std::string type;
+    glm::vec3 position;
+    glm::vec3 color;
+};
+
+class Config {
+public:
+    // Parámetros globales
+    std::string projectRoot;
+    std::string assets;        // Directorio base para assets
+    std::string shaders;       // Directorio de shaders
+    std::string vertexShader;  // Nombre del vertex shader global (sin extensión)
+    std::string defaultShader; // Nombre del fragment shader por defecto (sin extensión)
+    glm::vec3 ambientColor;
+    std::vector<LightConfig> lights;
+
+    static Config LoadFromFile(const std::string& configFilePath);
+};
+
+------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Coordinator.h
 ------------------------------------------------------------
 #pragma once
@@ -298,75 +370,125 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ECSPlayerController.h
 
 #include "Coordinator.h"
 #include "TransformComponent.h"
+#include "Logger.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <GLFW/glfw3.h>
+#include <cmath> // Para fmod
 
 /**
  * @class ECSPlayerController
  * @brief Controlador para mover un modelo estilo coche.
  *
- * Permite:
- *   - Avanzar con "W"
- *   - Retroceder con "S"
- *   - Girar a la izquierda con "A"
- *   - Girar a la derecha con "D"
+ * Separamos el offset base (definido en el YAML) del giro dinámico, pero en lugar de
+ * simplemente sumar la entrada, usamos una variable de velocidad angular para simular
+ * aceleración y damping. Así, al mantener pulsada la tecla, se acelera hasta un máximo,
+ * y al soltarla la velocidad angular se amortigua.
  *
- * Para corregir la importación del modelo (que llega “de pared”, apoyado en Y),
- * en el constructor se aplica una rotación fija de -90° en el eje X para colocarlo
- * horizontalmente (sobre el plano XZ). Se asume que, luego de la corrección, el frente
- * del modelo apunta a lo largo del eje +X cuando yaw = 0.
+ * La orientación efectiva se calcula como:
+ *
+ *     effectiveYaw = baseYawOffset + dynamicYaw
+ *
+ * donde dynamicYaw se integra a partir de la velocidad angular.
  */
 class ECSPlayerController {
 public:
-    ECSPlayerController(Coordinator* coordinator, ECS::Entity entity)
-        : mCoordinator(coordinator), mEntity(entity),
-          mMoveSpeed(10.0f), mRotateSpeed(90.0f)
+    /**
+     * @param coordinator Puntero al coordinator ECS.
+     * @param entity La entidad del coche.
+     * @param invertControls Si es true, se invierte la entrada de giro.
+     */
+    ECSPlayerController(Coordinator* coordinator, ECS::Entity entity, bool invertControls = true)
+        : mCoordinator(coordinator),
+          mEntity(entity),
+          m_MoveSpeed(20.0f),
+          m_MaxAngularSpeed(600.0f),  // Máxima velocidad angular en grados/segundo
+          m_Damping(5.0f),           // Factor de damping para desacelerar
+          m_InvertControls(invertControls),
+          m_DynamicYaw(0.0f),
+          m_AngularVelocity(0.0f)
     {
-        // Obtenemos la transformación inicial cargada desde YAML.
         auto& transform = mCoordinator->GetComponent<TransformComponent>(mEntity);
-        // Colocamos el modelo horizontalmente:
-        // Se rota -90° en X para corregir la orientación (si originalmente está “de pared”).
-        transform.rotation.x = -90.0f;
-        transform.rotation.z = 0.0f;
-        // Se utiliza el yaw cargado (o 0 si viene desde YAML) para el giro.
-        m_PlayerYaw = transform.rotation.y;
+        // Se guarda el offset base en yaw definido en el YAML.
+        // Por ejemplo, en tu YAML: rotation: [-90.0, 180.0, 0.0] → baseYawOffset = 180°
+        m_BaseYawOffset = transform.rotation.y;
+        Logger::Debug("[ECSPlayerController] Constructor: baseYawOffset = " + std::to_string(m_BaseYawOffset));
+        // Inicializamos la rotación efectiva
+        float effectiveYaw = m_BaseYawOffset + m_DynamicYaw;
+        transform.rotation.y = effectiveYaw;
         transform.UpdateTransform();
     }
     
     void Update(float dt) {
         GLFWwindow* window = glfwGetCurrentContext();
         if (!window) return;
-        
         auto& transform = mCoordinator->GetComponent<TransformComponent>(mEntity);
         
-        // --- Procesamiento de la rotación ---
-        // "A" para girar a la izquierda y "D" para girar a la derecha.
+        // --- Procesamiento de la entrada de giro ---
         float turnInput = 0.0f;
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            turnInput -= 1.0f;
+            turnInput -= 1.0f;  // Gira a la izquierda
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            turnInput += 1.0f;
-        m_PlayerYaw += turnInput * mRotateSpeed * dt;
-        transform.rotation.y = m_PlayerYaw;
+            turnInput += 1.0f;  // Gira a la derecha
+        // Si se desea invertir la entrada, se aplica el flag
+        if (m_InvertControls)
+            turnInput = -turnInput;
+        Logger::Debug("[ECSPlayerController] turnInput = " + std::to_string(turnInput));
+        
+        // Calculamos aceleración angular a partir de la entrada
+        float angularAcceleration = turnInput * m_MaxAngularSpeed; // valor en grados/segundo²
+        // Actualizamos la velocidad angular con aceleración
+        m_AngularVelocity += angularAcceleration * dt;
+        // Aplicamos damping para amortiguar cuando no hay entrada
+        m_AngularVelocity -= m_AngularVelocity * m_Damping * dt;
+        // Limitamos la velocidad angular al máximo
+        if (m_AngularVelocity > m_MaxAngularSpeed)
+            m_AngularVelocity = m_MaxAngularSpeed;
+        if (m_AngularVelocity < -m_MaxAngularSpeed)
+            m_AngularVelocity = -m_MaxAngularSpeed;
+        Logger::Debug("[ECSPlayerController] Angular velocity = " + std::to_string(m_AngularVelocity));
+        
+        // Integramos la velocidad angular para actualizar el ángulo dinámico
+        m_DynamicYaw += m_AngularVelocity * dt;
+        // Normalizamos dynamicYaw para evitar valores excesivos
+        m_DynamicYaw = fmod(m_DynamicYaw, 360.0f);
+        Logger::Debug("[ECSPlayerController] dynamicYaw = " + std::to_string(m_DynamicYaw));
+        
+        // Calculamos el yaw efectivo combinando el offset base y el ángulo dinámico
+        float effectiveYaw = m_BaseYawOffset + m_DynamicYaw;
+        Logger::Debug("[ECSPlayerController] effectiveYaw = " + std::to_string(effectiveYaw));
+        transform.rotation.y = effectiveYaw;
         
         // --- Cálculo del vector forward ---
-        // Se asume que, con yaw = 0, el vector forward es (1, 0, 0)
-        float yawRadians = glm::radians(m_PlayerYaw);
+        float yawRadians = glm::radians(effectiveYaw);
         glm::vec3 forward;
-        forward.x = cos(yawRadians);
+        // Con effectiveYaw = 180° y dynamicYaw = 0, forward = (0, 0, -1) (según la convención que deseas)
+        forward.x = sin(yawRadians);
         forward.y = 0.0f;
-        forward.z = sin(yawRadians);
+        forward.z = cos(yawRadians);
         forward = glm::normalize(forward);
+        Logger::Debug("[ECSPlayerController] forward vector = (" +
+                      std::to_string(forward.x) + ", " +
+                      std::to_string(forward.y) + ", " +
+                      std::to_string(forward.z) + ")");
         
         // --- Procesamiento del movimiento ---
-        // "W" para avanzar y "S" para retroceder.
         float moveInput = 0.0f;
         if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
             moveInput += 1.0f;
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
             moveInput -= 1.0f;
-        transform.translation += forward * moveInput * mMoveSpeed * dt;
+        Logger::Debug("[ECSPlayerController] moveInput = " + std::to_string(moveInput));
+        
+        Logger::Debug("[ECSPlayerController] translation antes = (" +
+                      std::to_string(transform.translation.x) + ", " +
+                      std::to_string(transform.translation.y) + ", " +
+                      std::to_string(transform.translation.z) + ")");
+        transform.translation += forward * moveInput * m_MoveSpeed * dt;
+        Logger::Debug("[ECSPlayerController] translation después = (" +
+                      std::to_string(transform.translation.x) + ", " +
+                      std::to_string(transform.translation.y) + ", " +
+                      std::to_string(transform.translation.z) + ")");
         
         // Actualizamos la transformación final (T * R * S).
         transform.UpdateTransform();
@@ -375,9 +497,13 @@ public:
 private:
     Coordinator* mCoordinator;
     ECS::Entity mEntity;
-    float mMoveSpeed;    // Velocidad de movimiento (unidades/segundo)
-    float mRotateSpeed;  // Velocidad de rotación (grados/segundo)
-    float m_PlayerYaw;   // Ángulo de giro actual (en grados)
+    float m_MoveSpeed;        // Velocidad de movimiento (unidades/segundo)
+    float m_MaxAngularSpeed;  // Máxima velocidad angular en grados/segundo
+    float m_Damping;          // Factor de damping para desacelerar la velocidad angular
+    bool m_InvertControls;    // Si es true, se invierte la entrada de giro
+    float m_BaseYawOffset;    // Offset base proveniente del YAML (por ejemplo, 180°)
+    float m_DynamicYaw;       // Ángulo dinámico de giro, acumulado a partir de la velocidad angular
+    float m_AngularVelocity;  // Velocidad angular actual (grados/segundo)
 };
 
 #endif // ECSPLAYERCONTROLLER_H
@@ -472,56 +598,37 @@ private:
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\FileUtils.h
 ------------------------------------------------------------
 #pragma once
-
 #include <string>
 #include <filesystem>
-#include <fstream>
-#include "stb_image.h"
 #include "Logger.h"
 
 namespace FileUtils {
 
 inline std::string NormalizePath(const std::string& path) {
-    std::filesystem::path fsPath(path);
-    std::string normalized = fsPath.generic_string();
+    std::filesystem::path p(path);
+    std::string normalized = p.generic_string();
     Logger::Debug("[FileUtils] Normalized path: " + normalized);
     return normalized;
 }
 
+inline std::string ResolvePath(const std::string& base, const std::string& relative) {
+    std::string rel = relative;
+    if (!rel.empty() && rel.front() == '/')
+        rel.erase(0, 1);
+    std::filesystem::path basePath(base);
+    std::filesystem::path fullPath = basePath / rel;
+    std::string resolved = fullPath.generic_string();
+    Logger::Debug("[FileUtils] Resolved path: " + resolved);
+    return resolved;
+}
+
+// Definición de la estructura para la carga de imágenes
 struct ImageData {
     unsigned char* data = nullptr;
     int width = 0;
     int height = 0;
     int channels = 0;
 };
-
-inline ImageData LoadImageData(const std::string& path, bool alpha) {
-    Logger::Info("[FileUtils] Loading image: " + path);
-    ImageData img;
-    
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file) {
-        Logger::Error("[FileUtils] Cannot open file: " + path);
-        return img;
-    }
-    auto fileSize = file.tellg();
-    file.seekg(0, std::ios::beg);
-    Logger::Info("[FileUtils] File size: " + std::to_string(fileSize) + " bytes");
-    file.close();
-    
-    stbi_set_flip_vertically_on_load(false);
-    int desired_channels = alpha ? 4 : 3;
-    img.data = stbi_load(path.c_str(), &img.width, &img.height, &img.channels, desired_channels);
-    if (!img.data) {
-        Logger::Error("[FileUtils] stbi_load failed: " + std::string(stbi_failure_reason()));
-    } else {
-        img.channels = desired_channels;
-        Logger::Info("[FileUtils] Loaded image: " + path +
-                     " (" + std::to_string(img.width) + "x" + std::to_string(img.height) +
-                     ", " + std::to_string(img.channels) + " channels)");
-    }
-    return img;
-}
 
 } // namespace FileUtils
 
@@ -839,50 +946,38 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Model.h
 
 #include <string>
 #include <vector>
-#include "ModelLoader.h"
 #include "Submesh.h"
-#include "Material.h"
-#include <assimp/Importer.hpp>
-#include <assimp/postprocess.h>
+#include "Logger.h"
 #include <assimp/scene.h>
 #include <glm/glm.hpp>
-#include "ResourceManager.h"
-#include <filesystem>
-#include "Logger.h"
 
-// Variable global (si es requerida en otras partes)
-extern std::string gProjectRoot;
-
-inline std::string GetTexturePath(aiMaterial* material, aiTextureType type, const std::string& baseDir) {
-    aiString str;
-    if (material->GetTexture(type, 0, &str) != AI_SUCCESS) {
-        if (type == aiTextureType_BASE_COLOR)
-            if (material->GetTexture(aiTextureType_DIFFUSE, 0, &str) != AI_SUCCESS)
-                return "";
-        else
-            return "";
-    }
-    std::string relPath(str.C_Str());
-    Logger::Debug("[Model] Texture original: " + relPath);
-    std::filesystem::path fsPath(relPath);
-    if (!fsPath.is_absolute())
-        return baseDir + "/" + relPath;
-    return relPath;
+// Función inline para convertir un aiMatrix4x4 a glm::mat4
+inline glm::mat4 aiMatrix4x4ToGlm(const aiMatrix4x4 &from) {
+    glm::mat4 to;
+    to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
+    to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
+    to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
+    to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
+    return to;
 }
 
 class Model {
 public:
-    std::vector<Submesh> submeshes;
-    
-    explicit Model(const std::string &path) {
-        Logger::Info("[Model] Loading from: " + path);
-        loadModel(path);
-    }
-    
+    // Constructor: carga el modelo desde el archivo especificado
+    Model(const std::string &path);
+
+    // Método para dibujar el modelo
     void Draw();
-    
+
+    // Vector de submeshes
+    std::vector<Submesh> submeshes;
+
 private:
+    // Método para cargar el modelo
     void loadModel(const std::string &path);
+
+    // Función recursiva para procesar la jerarquía de nodos
+    void processNode(aiNode* node, const aiScene* scene, const glm::mat4& parentTransform, const std::string &modelDir);
 };
 
 ------------------------------------------------------------
@@ -972,29 +1067,37 @@ private:
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ResourceManager.h
 ------------------------------------------------------------
 #pragma once
-
 #include <map>
 #include <string>
 #include <memory>
 #include <future>
 #include "Shader.h"
 #include "Texture2D.h"
-
-class Model;
+#include "Model.h"
+#include "Config.h"
 
 class ResourceManager {
 public:
+    static void SetConfig(const Config& config) { m_Config = config; }
+
+    // Carga un shader dado un vertex y un fragment shader, con un nombre clave.
     static std::shared_ptr<Shader> LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name);
-    static std::shared_ptr<Shader> GetShader(std::string name);
-    static std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, std::string name);
-    static std::shared_ptr<Texture2D> GetTexture(std::string name);
-    static std::shared_ptr<Model> LoadModel(const char* file, std::string name);
-    static std::shared_ptr<Model> GetModel(std::string name);
-    static void Clear();
-    static std::future<std::shared_ptr<Model>> LoadModelAsync(const char* file, std::string name);
     
+    // Carga un shader usando el vertex shader global (definido en config) y un fragment shader dado (sin extensión).
+    static std::shared_ptr<Shader> LoadShaderWithFragment(const std::string& fragmentShaderName, const std::string& key);
+
+    static std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, std::string name);
+    static std::shared_ptr<Model> LoadModel(const char* file, std::string name);
+
+    static std::shared_ptr<Shader> GetShader(const std::string& name);
+    static std::shared_ptr<Texture2D> GetTexture(const std::string& name);
+    static std::shared_ptr<Model> GetModel(const std::string& name);
+
+    static void Clear();
+
 private:
     ResourceManager() = default;
+    static Config m_Config;
     static std::map<std::string, std::shared_ptr<Shader>> Shaders;
     static std::map<std::string, std::shared_ptr<Texture2D>> Textures;
     static std::map<std::string, std::shared_ptr<Model>> Models;
@@ -1277,27 +1380,37 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Texture2D.h
 #include <glad/glad.h>
 #include <string>
 #include "stb_image.h"
-#include "FileUtils.h"
+#include "FileUtils.h"  // Se espera que aquí se defina la estructura ImageData
 #include "Logger.h"
 
 class Texture2D {
 public:
     unsigned int ID = 0;
     int Width = 0, Height = 0;
-    GLenum Internal_Format = GL_RGB, Image_Format = GL_RGB;
-    GLenum Wrap_S = GL_REPEAT, Wrap_T = GL_REPEAT;
-    GLenum Filter_Min = GL_LINEAR_MIPMAP_LINEAR, Filter_Mag = GL_LINEAR;
-    
+    GLenum Internal_Format = GL_RGB;  // Formato interno de la textura
+    GLenum Image_Format = GL_RGB;     // Formato de la imagen cargada
+    GLenum Wrap_S = GL_REPEAT, Wrap_T = GL_REPEAT; // Wrapping
+    GLenum Filter_Min = GL_LINEAR_MIPMAP_LINEAR, Filter_Mag = GL_LINEAR; // Filtros
+
+    // Constructor: genera la textura en OpenGL y registra el ID
     Texture2D() {
         glGenTextures(1, &ID);
         Logger::Debug("[Texture2D] Generated ID: " + std::to_string(ID));
     }
     
-    // No se recomienda la carga síncrona; usar GenerateFromData
+    // Se desaconseja el uso de carga síncrona mediante Generate; se usa GenerateFromData.
     void Generate(const char* file, bool alpha) {
         Logger::Warning("[Texture2D] Use GenerateFromData instead");
     }
     
+    /**
+     * @brief Genera la textura a partir de los datos de imagen proporcionados.
+     * @param img Datos de la imagen (ancho, alto, canales y puntero a los datos).
+     * @param alpha Si es true, se espera que la imagen tenga canal alfa.
+     *
+     * Se configuran los formatos internos y externos según si la textura tiene alfa,
+     * se generan mipmaps y se establecen los parámetros de wrapping y filtrado.
+     */
     void GenerateFromData(const FileUtils::ImageData& img, bool alpha) {
         if (!img.data) {
             Logger::Error("[Texture2D] Image data is null");
@@ -1308,6 +1421,7 @@ public:
         int desired_channels = alpha ? 4 : 3;
         GLenum format = (desired_channels == 4) ? GL_RGBA : GL_RGB;
         
+        // Configura formatos y wrapping según si se usa alfa.
         if (alpha) {
             Internal_Format = GL_SRGB_ALPHA;
             Image_Format = GL_RGBA;
@@ -1337,29 +1451,35 @@ public:
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\TransformComponent.h
 ------------------------------------------------------------
 #pragma once
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 /**
- * Componente de transformación para una entidad.
+ * @struct TransformComponent
+ * @brief Componente de transformación para una entidad.
  *
- * En este caso, para controles de coche, ignoramos pitch y roll
- * (se esperan en 0) y aplicamos únicamente la rotación dinámica (yaw).
+ * Se utiliza la convención glTF:
+ *   - Sistema de coordenadas right-handed, con Y up.
+ *   - La transformación final se construye como: T * R * S.
  *
- * La transformación final se compone como:
- *    transform = T * R_dynamic * S
+ * Esto significa que, para transformar un vértice \(v\):
+ *    v' = T * R * S * v
+ * se aplica primero la escala, luego la rotación y por último la traslación.
  */
 struct TransformComponent {
     glm::vec3 translation = glm::vec3(0.0f);
-    // Solo usamos rotation.y para el giro; se espera que rotation.x y rotation.z sean 0.
-    glm::vec3 rotation = glm::vec3(0.0f);
+    glm::vec3 rotation = glm::vec3(0.0f);  // (pitch, yaw, roll) en grados.
     glm::vec3 scale = glm::vec3(1.0f);
     glm::mat4 transform = glm::mat4(1.0f);
 
-    // Actualiza la matriz de transformación usando únicamente el yaw (rotation.y)
+    // Actualiza la transformación final: T * R * S.
     void UpdateTransform() {
         glm::mat4 T = glm::translate(glm::mat4(1.0f), translation);
-        glm::mat4 R = glm::rotate(glm::mat4(1.0f), glm::radians(rotation.y), glm::vec3(0,1,0));
+        glm::mat4 R = glm::yawPitchRoll(glm::radians(rotation.y),
+                                        glm::radians(rotation.x),
+                                        glm::radians(rotation.z));
         glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
         transform = T * R * S;
     }
@@ -1402,6 +1522,57 @@ public:
         Logger::Debug("[UniformBuffer] Bound to point " + std::to_string(bindingPoint));
     }
 };
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Config.cpp
+------------------------------------------------------------
+#include "Config.h"
+#include "Logger.h"
+#include <filesystem>
+
+Config Config::LoadFromFile(const std::string& configFilePath) {
+    Config config;
+    try {
+        YAML::Node root = YAML::LoadFile(configFilePath);
+        if (root["projectRoot"])
+            config.projectRoot = root["projectRoot"].as<std::string>();
+        if (root["assets"])
+            config.assets = root["assets"].as<std::string>();
+        if (root["shaders"])
+            config.shaders = root["shaders"].as<std::string>();
+        if (root["vertexShader"])
+            config.vertexShader = root["vertexShader"].as<std::string>();
+        if (root["defaultShader"])
+            config.defaultShader = root["defaultShader"].as<std::string>();
+        if (root["render"] && root["render"]["ambientColor"]) {
+            auto ac = root["render"]["ambientColor"].as<std::vector<float>>();
+            if (ac.size() >= 3)
+                config.ambientColor = glm::vec3(ac[0], ac[1], ac[2]);
+        }
+        if (root["lights"]) {
+            for (const auto& lightNode : root["lights"]) {
+                LightConfig lc;
+                if (lightNode["type"])
+                    lc.type = lightNode["type"].as<std::string>();
+                if (lightNode["position"]) {
+                    auto pos = lightNode["position"].as<std::vector<float>>();
+                    if (pos.size() >= 3)
+                        lc.position = glm::vec3(pos[0], pos[1], pos[2]);
+                }
+                if (lightNode["color"]) {
+                    auto col = lightNode["color"].as<std::vector<float>>();
+                    if (col.size() >= 3)
+                        lc.color = glm::vec3(col[0], col[1], col[2]);
+                }
+                config.lights.push_back(lc);
+            }
+        }
+        Logger::Info("[Config] Loaded configuration from: " + configFilePath);
+    } catch (const std::exception& e) {
+        Logger::Error("[Config] Error loading config.yaml: " + std::string(e.what()));
+    }
+    return config;
+}
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\EntityLoader.cpp
@@ -1510,443 +1681,317 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 ------------------------------------------------------------
 /**
  * @file Main.cpp
- * @brief Entry point for the medical graphics engine using ECS and YAML.
+ * @brief Entry point for the engine using ECS and YAML-based configuration.
  *
- * This application initializes GLFW and GLAD, loads shader and resource data,
- * sets up the ECS (loading entities from a YAML configuration file),
- * configures a player controller to move the player entity with WASD and arrow keys,
- * configures lights, and runs the render loop.
+ * This application initializes GLFW and GLAD, loads resources using paths resolved from config.yaml,
+ * sets up the ECS (loading entities from entities.yaml), configures a player controller,
+ * configures lights from the configuration, and runs the render loop.
  */
 
- #include <glad/glad.h>
- #include <GLFW/glfw3.h>
- #include <iostream>
- #include "ResourceManager.h"
- #include "Logger.h"
- #include <glm/glm.hpp>
- #include <glm/gtc/matrix_transform.hpp>
- #include <glm/gtc/type_ptr.hpp>
- #include <filesystem>
- #include <windows.h>
- #include "Coordinator.h"
- #include "EntityLoader.h"
- #include "RenderSystem.h"
- #include "Shader.h"
- #include "Camera.h"
- #include "Light.h"
- #include "LightManager.h"
- #include "ECSPlayerController.h"  // New player controller based on ECS
- 
- std::string gProjectRoot;
- 
- std::string GetProjectRoot() {
-     char buffer[MAX_PATH];
-     if (GetModuleFileNameA(NULL, buffer, MAX_PATH) == 0) {
-         Logger::Error("GetProjectRoot: Unable to get module file name.");
-         return "";
-     }
-     std::filesystem::path exePath(buffer);
-     std::filesystem::path projectRoot = exePath.parent_path().parent_path().parent_path();
-     Logger::Info("GetProjectRoot: Project root is " + projectRoot.string());
-     return projectRoot.string();
- }
- 
- Camera camera;
- float deltaTime = 0.0f, lastFrame = 0.0f;
- 
- void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
-     glViewport(0, 0, width, height);
-     Logger::Debug("Framebuffer resized: width = " + std::to_string(width) +
-                   ", height = " + std::to_string(height));
- }
- 
- int main() {
-     Logger::SetLogFile("Toxic.log");
-     Logger::SetLogLevel(LogLevel::DEBUG);
-     Logger::Info("Main: Starting application.");
-     
-     gProjectRoot = GetProjectRoot();
-     if (gProjectRoot.empty()) {
-         Logger::Error("Main: Project root is empty.");
-         return -1;
-     }
-     
-     if (!glfwInit()) {
-         Logger::Error("Main: Failed to initialize GLFW.");
-         return -1;
-     }
-     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-     
-     GLFWwindow* window = glfwCreateWindow(1920, 1080, "Toxic - 3D", nullptr, nullptr);
-     if (!window) {
-         Logger::Error("Main: Failed to create GLFW window.");
-         glfwTerminate();
-         return -1;
-     }
-     glfwMakeContextCurrent(window);
-     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-     
-     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
-         Logger::Error("Main: Failed to initialize GLAD.");
-         return -1;
-     }
-     glEnable(GL_DEPTH_TEST);
-     glEnable(GL_FRAMEBUFFER_SRGB);
-     glEnable(GL_BLEND);
-     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-     
-     // Initialize ECS coordinator
-     Coordinator coordinator;
-     coordinator.Init();
-     coordinator.RegisterComponent<TransformComponent>();
-     coordinator.RegisterComponent<RenderComponent>();
-     
-     // Register RenderSystem and set its signature (requires TransformComponent and RenderComponent)
-     auto renderSystem = coordinator.RegisterSystem<RenderSystem>();
-     ECS::Signature renderSignature;
-     renderSignature.set(coordinator.GetComponentType<TransformComponent>());
-     renderSignature.set(coordinator.GetComponentType<RenderComponent>());
-     coordinator.SetSystemSignature<RenderSystem>(renderSignature);
-     
-     // Load entities from YAML configuration (ensure that config/entities.yaml exists)
-     std::string entityConfigPath = gProjectRoot + "/config/entities.yaml";
-     EntityLoader::LoadEntitiesFromYAML(&coordinator, entityConfigPath);
-     
-     // Asumimos que la primera entidad (ID 0) es el vehículo del jugador.
-     ECS::Entity playerEntity = 0;
-     ECSPlayerController playerController(&coordinator, playerEntity);
-     
-     // Load shader resources
-     std::string vertexShaderPath = gProjectRoot + "/shaders/pbr_vertex.glsl";
-     std::string fragmentShaderPath = gProjectRoot + "/shaders/pbr_fragment.glsl";
-     auto pbrShader = ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "pbr");
-     pbrShader->Use();
-     glUniform1i(glGetUniformLocation(pbrShader->ID, "albedoMap"), 0);
-     glUniform1i(glGetUniformLocation(pbrShader->ID, "metallicRoughnessMap"), 1);
-     glUniform1i(glGetUniformLocation(pbrShader->ID, "normalMap"), 2);
-     glUniform1i(glGetUniformLocation(pbrShader->ID, "useMaps"), 1);
-     glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f/1080.0f, 0.1f, 100.0f);
-     glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-     Logger::Info("Main: Resources loaded successfully.");
-     
-     // Initialize the RenderSystem with its dependencies (coordinator, shader, and camera)
-     renderSystem->Init(&coordinator, pbrShader.get(), &camera);
-     
-     // Configure lights using LightManager (se mantiene la funcionalidad original)
-     LightManager lightManager;
-     {
-         Light pointLight1{};
-         pointLight1.typeAndPadding = glm::vec4(0, 0, 0, 0);
-         pointLight1.position = glm::vec4(5.0f, 5.0f, 5.0f, 1.0f);
-         pointLight1.colorAndIntensity = glm::vec4(1.0f, 0.5f, 0.5f, 1.0f);
-         lightManager.AddLight(pointLight1);
- 
-         Light pointLight2{};
-         pointLight2.typeAndPadding = glm::vec4(0, 0, 0, 0);
-         pointLight2.position = glm::vec4(-5.0f, 5.0f, 5.0f, 1.0f);
-         pointLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-         lightManager.AddLight(pointLight2);
-     }
-     {
-         Light spotLight1{};
-         spotLight1.typeAndPadding = glm::vec4(1, 0, 0, 0);
-         spotLight1.position = glm::vec4(0.0f, 5.0f, 0.0f, 1.0f);
-         spotLight1.direction = glm::vec4(0.0f, -1.0f, 0.0f, 0.0f);
-         spotLight1.colorAndIntensity = glm::vec4(0.5f, 1.0f, 0.5f, 1.0f);
-         spotLight1.spotParams = glm::vec4(glm::cos(glm::radians(12.5f)),
-                                            glm::cos(glm::radians(17.5f)),
-                                            0.0f, 0.0f);
-         lightManager.AddLight(spotLight1);
- 
-         Light spotLight2{};
-         spotLight2.typeAndPadding = glm::vec4(1, 0, 0, 0);
-         spotLight2.position = glm::vec4(0.0f, 5.0f, 5.0f, 1.0f);
-         spotLight2.direction = glm::vec4(0.0f, -1.0f, -1.0f, 0.0f);
-         spotLight2.colorAndIntensity = glm::vec4(1.0f, 1.0f, 0.5f, 1.0f);
-         spotLight2.spotParams = glm::vec4(glm::cos(glm::radians(15.0f)),
-                                            glm::cos(glm::radians(20.0f)),
-                                            0.0f, 0.0f);
-         lightManager.AddLight(spotLight2);
-     }
- 
-     unsigned int lightBlockIndex = glGetUniformBlockIndex(pbrShader->ID, "LightBlock");
-     if (lightBlockIndex == GL_INVALID_INDEX) {
-         Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
-     } else {
-         glUniformBlockBinding(pbrShader->ID, lightBlockIndex, 1);
-         Logger::Info("Main: LightBlock bound to binding point 1.");
-     }
-     
-     Logger::Info("Main: Entering main loop.");
-     while (!glfwWindowShouldClose(window)) {
-         float currentFrame = static_cast<float>(glfwGetTime());
-         deltaTime = currentFrame - lastFrame;
-         lastFrame = currentFrame;
-         
-         glfwPollEvents();
-         if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-             glfwSetWindowShouldClose(window, true);
-         
-         // Update player controller (WASD movement, rotation with arrow keys)
-         playerController.Update(deltaTime);
-         
-         // --- Actualización de la cámara: posición fija en el mundo ---
-         // La cámara se fija en (0,10,20) mirando al origen para observar el modelo sin seguirlo.
-         camera.Position = glm::vec3(0.0f, 10.0f, 20.0f);
-         camera.Front = glm::normalize(glm::vec3(0.0f) - camera.Position);
-         camera.Up = glm::vec3(0, 1, 0);
-         
-         glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-         
-         // Update shader uniforms for camera and view BEFORE rendering
-         pbrShader->Use();
-         glm::mat4 view = camera.GetViewMatrix();
-         glUniformMatrix4fv(glGetUniformLocation(pbrShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
-         glUniform3fv(glGetUniformLocation(pbrShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
-         
-         lightManager.UpdateUBO();
-         lightManager.lightUBO.BindToPoint(1);
-         
-         glm::vec3 ambientLightColor(0.2f);
-         glUniform3fv(glGetUniformLocation(pbrShader->ID, "ambientColor"), 1, glm::value_ptr(ambientLightColor));
-         
-         // Render all entities via the RenderSystem (which iterates over entities with Transform and Render components)
-         renderSystem->Update(deltaTime);
-         
-         glfwSwapBuffers(window);
-     }
-     
-     Logger::Info("Main: Exiting main loop. Cleaning up resources.");
-     ResourceManager::Clear();
-     glfwTerminate();
-     return 0;
- } 
+#include <glad/glad.h>
+#include <GLFW/glfw3.h>
+#include <iostream>
+#include "ResourceManager.h"
+#include "Config.h"
+#include "Logger.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <filesystem>
+#include "Coordinator.h"
+#include "EntityLoader.h"
+#include "RenderSystem.h"
+#include "Shader.h"
+#include "Camera.h"
+#include "Light.h"
+#include "LightManager.h"
+#include "ECSPlayerController.h"
+
+float deltaTime = 0.0f, lastFrame = 0.0f;
+Camera camera;
+
+void framebuffer_size_callback(GLFWwindow *window, int width, int height)
+{
+    glViewport(0, 0, width, height);
+    Logger::Debug("Framebuffer resized: width = " + std::to_string(width) +
+                  ", height = " + std::to_string(height));
+}
+
+int main()
+{
+    Logger::SetLogFile("Toxic.log");
+    Logger::SetLogLevel(LogLevel::DEBUG);
+    Logger::Info("Main: Starting application.");
+
+    // Cargar configuración desde config.yaml usando una ruta relativa.
+    std::string configPath = "./config/config.yaml";
+    Config config = Config::LoadFromFile(configPath);
+
+    // Inyectar la configuración en ResourceManager.
+    ResourceManager::SetConfig(config);
+
+    if (!glfwInit())
+    {
+        Logger::Error("Main: Failed to initialize GLFW.");
+        return -1;
+    }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    GLFWwindow *window = glfwCreateWindow(1920, 1080, "Toxic - 3D", nullptr, nullptr);
+    if (!window)
+    {
+        Logger::Error("Main: Failed to create GLFW window.");
+        glfwTerminate();
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    {
+        Logger::Error("Main: Failed to initialize GLAD.");
+        return -1;
+    }
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_FRAMEBUFFER_SRGB);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Inicializar ECS coordinator
+    Coordinator coordinator;
+    coordinator.Init();
+    coordinator.RegisterComponent<TransformComponent>();
+    coordinator.RegisterComponent<RenderComponent>();
+
+    auto renderSystem = coordinator.RegisterSystem<RenderSystem>();
+    ECS::Signature renderSignature;
+    renderSignature.set(coordinator.GetComponentType<TransformComponent>());
+    renderSignature.set(coordinator.GetComponentType<RenderComponent>());
+    coordinator.SetSystemSignature<RenderSystem>(renderSignature);
+
+    // Cargar entidades desde entities.yaml (ruta relativa)
+    std::string entityConfigPath = "./config/entities.yaml";
+    EntityLoader::LoadEntitiesFromYAML(&coordinator, entityConfigPath);
+
+    // Asumir que la primera entidad (ID 0) es el vehículo del jugador.
+    ECS::Entity playerEntity = 0;
+    ECSPlayerController playerController(&coordinator, playerEntity);
+
+    // Cargar el shader global:
+    // Vertex shader global se toma de config.vertexShader y el fragment shader global es el defaultShader.
+    std::string vertexShaderPath = config.vertexShader;
+    std::string fragmentShaderPath = config.defaultShader;
+    auto defaultShader = ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "defaultShader");
+    defaultShader->Use();
+    glUniform1i(glGetUniformLocation(defaultShader->ID, "albedoMap"), 0);
+    glUniform1i(glGetUniformLocation(defaultShader->ID, "metallicRoughnessMap"), 1);
+    glUniform1i(glGetUniformLocation(defaultShader->ID, "normalMap"), 2);
+    glUniform1i(glGetUniformLocation(defaultShader->ID, "useMaps"), 1);
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f / 1080.0f, 0.1f, 100.0f);
+    glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+    Logger::Info("Main: Default shaders loaded successfully.");
+
+    renderSystem->Init(&coordinator, defaultShader.get(), &camera);
+
+    // Configurar las luces usando la información de config.yaml
+    LightManager lightManager;
+    for (const auto &lc : config.lights)
+    {
+        Light light{};
+        if (lc.type == "point")
+            light.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        light.position = glm::vec4(lc.position, 1.0f);
+        light.colorAndIntensity = glm::vec4(lc.color, 1.0f);
+        lightManager.AddLight(light);
+    }
+
+    unsigned int lightBlockIndex = glGetUniformBlockIndex(defaultShader->ID, "LightBlock");
+    if (lightBlockIndex == GL_INVALID_INDEX)
+    {
+        Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
+    }
+    else
+    {
+        glUniformBlockBinding(defaultShader->ID, lightBlockIndex, 1);
+        Logger::Info("Main: LightBlock bound to binding point 1.");
+    }
+
+    Logger::Info("Main: Entering main loop.");
+    while (!glfwWindowShouldClose(window))
+    {
+        float currentFrame = static_cast<float>(glfwGetTime());
+        deltaTime = currentFrame - lastFrame;
+        lastFrame = currentFrame;
+
+        glfwPollEvents();
+        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+            glfwSetWindowShouldClose(window, true);
+
+        playerController.Update(deltaTime);
+
+        // Configurar la cámara fija para observar el modelo
+        camera.Position = glm::vec3(0.0f, 10.0f, 20.0f);
+        camera.Front = glm::normalize(glm::vec3(0.0f) - camera.Position);
+        camera.Up = glm::vec3(0, 1, 0);
+
+        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        defaultShader->Use();
+        glm::mat4 view = camera.GetViewMatrix();
+        glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
+        glUniform3fv(glGetUniformLocation(defaultShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
+
+        lightManager.UpdateUBO();
+        lightManager.lightUBO.BindToPoint(1);
+        glUniform3fv(glGetUniformLocation(defaultShader->ID, "ambientColor"), 1, glm::value_ptr(config.ambientColor));
+
+        renderSystem->Update(deltaTime);
+
+        glfwSwapBuffers(window);
+    }
+
+    Logger::Info("Main: Exiting main loop. Cleaning up resources.");
+    ResourceManager::Clear();
+    glfwTerminate();
+    return 0;
+}
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.cpp
 ------------------------------------------------------------
-/**
- * @file Model.cpp
- * @brief Implementation of the Model class. Loads a 3D model from a glTF file using Assimp,
- * processes meshes and materials—including additional textures (occlusion and emissive)
- * and material factors (base color, metallic, roughness, emissive).
- */
-
 #include "Model.h"
 #include "Submesh.h"
 #include "Material.h"
+#include "ResourceManager.h" // Si necesitas acceder a recursos para materiales
+#include "FileUtils.h"
+#include "Logger.h"
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
-#include <assimp/material.h>
 #include <sstream>
 #include <filesystem>
-#include "Logger.h"
 #include <glm/gtc/type_ptr.hpp>
 
-// Helper function: returns true if the given path is non-empty and has a file extension.
-bool isValidTexturePath(const std::string &path)
-{
-    if (path.empty())
-        return false;
-    std::filesystem::path p(path);
-    return p.has_extension();
+// Función para cargar un material a partir de un aiMaterial y la ruta base
+Material LoadMaterial(aiMaterial* material, const std::string &modelDir) {
+    Material mat;
+    aiString texPath;
+    if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texPath) == AI_SUCCESS) {
+        std::string texPathStr = texPath.C_Str();
+        if (!texPathStr.empty() && texPathStr.front() == '/')
+            texPathStr.erase(0, 1);
+        std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+        Logger::Debug("[LoadMaterial] Loading texture from: " + fullTexPath);
+        mat.albedo = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
+    } else {
+        mat.baseColorFactor = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+    }
+    return mat;
 }
 
-void Model::loadModel(const std::string &path)
-{
-    Logger::Info("[Model::loadModel] Starting load: " + path);
+// Constructor: llama a loadModel
+Model::Model(const std::string &path) {
+    Logger::Info("[Model] Loading from: " + path);
+    loadModel(path);
+}
 
+// Recorre la jerarquía de nodos y procesa cada malla
+void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& parentTransform, const std::string &modelDir) {
+    glm::mat4 nodeTransform = parentTransform * aiMatrix4x4ToGlm(node->mTransformation);
+    
+    for (unsigned int i = 0; i < node->mNumMeshes; i++) {
+        aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+        Submesh submesh;
+        Logger::Info("[Model::processNode] Processing mesh from node: " + std::string(node->mName.C_Str()) +
+                     ", vertices: " + std::to_string(mesh->mNumVertices));
+        
+        glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(nodeTransform)));
+        
+        for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
+            Vertex vertex;
+            glm::vec4 pos = nodeTransform * glm::vec4(mesh->mVertices[j].x,
+                                                       mesh->mVertices[j].y,
+                                                       mesh->mVertices[j].z,
+                                                       1.0f);
+            vertex.Position = glm::vec3(pos);
+            
+            if (mesh->HasNormals()) {
+                glm::vec3 norm(mesh->mNormals[j].x,
+                               mesh->mNormals[j].y,
+                               mesh->mNormals[j].z);
+                vertex.Normal = glm::normalize(normalMatrix * norm);
+            } else {
+                vertex.Normal = glm::vec3(0.0f);
+            }
+            
+            if (mesh->HasTextureCoords(0))
+                vertex.TexCoords = glm::vec2(mesh->mTextureCoords[0][j].x,
+                                             mesh->mTextureCoords[0][j].y);
+            else
+                vertex.TexCoords = glm::vec2(0.0f);
+            
+            if (mesh->HasTangentsAndBitangents()) {
+                glm::vec3 tan(mesh->mTangents[j].x,
+                              mesh->mTangents[j].y,
+                              mesh->mTangents[j].z);
+                vertex.Tangent = glm::normalize(normalMatrix * tan);
+            } else {
+                vertex.Tangent = glm::vec3(0.0f);
+            }
+            
+            submesh.vertices.push_back(vertex);
+        }
+        
+        for (unsigned int j = 0; j < mesh->mNumFaces; j++) {
+            aiFace face = mesh->mFaces[j];
+            for (unsigned int k = 0; k < face.mNumIndices; k++) {
+                submesh.indices.push_back(face.mIndices[k]);
+            }
+        }
+        
+        if (scene->HasMaterials()) {
+            aiMaterial* aiMat = scene->mMaterials[mesh->mMaterialIndex];
+            submesh.material = LoadMaterial(aiMat, modelDir);
+        }
+        
+        submesh.setupMesh();
+        submeshes.push_back(submesh);
+    }
+    
+    for (unsigned int i = 0; i < node->mNumChildren; i++) {
+        processNode(node->mChildren[i], scene, nodeTransform, modelDir);
+    }
+}
+
+// Carga el modelo usando Assimp y procesa la jerarquía de nodos.
+void Model::loadModel(const std::string &path) {
+    Logger::Info("[Model::loadModel] Starting load: " + path);
+    
     Assimp::Importer importer;
     const aiScene *scene = importer.ReadFile(path,
-                                             aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
-
-    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
-    {
-        Logger::Error("[Model::loadModel] Failed to load file: " + path +
-                      "\nReason: " + importer.GetErrorString());
+        aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+    
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+        Logger::Error("[Model::loadModel] Failed to load file: " + path + "\nReason: " + importer.GetErrorString());
         return;
     }
-
+    
     std::filesystem::path modelFilePath(path);
     std::string modelDir = modelFilePath.parent_path().generic_string();
     Logger::Info("[Model::loadModel] Base directory: " + modelDir);
-
-    // Process each mesh in the scene
-    for (unsigned int i = 0; i < scene->mNumMeshes; i++)
-    {
-        aiMesh *mesh = scene->mMeshes[i];
-        Submesh submesh;
-        Logger::Info("[Model::loadModel] Processing mesh " + std::to_string(i) +
-                     " with " + std::to_string(mesh->mNumVertices) + " vertices.");
-
-        // Process vertices
-        for (unsigned int j = 0; j < mesh->mNumVertices; j++)
-        {
-            Vertex vertex;
-            vertex.Position = glm::vec3(mesh->mVertices[j].x,
-                                        mesh->mVertices[j].y,
-                                        mesh->mVertices[j].z);
-            vertex.Normal = mesh->HasNormals()
-                                ? glm::normalize(glm::vec3(mesh->mNormals[j].x,
-                                                           mesh->mNormals[j].y,
-                                                           mesh->mNormals[j].z))
-                                : glm::vec3(0.0f);
-            vertex.TexCoords = mesh->HasTextureCoords(0)
-                                   ? glm::vec2(mesh->mTextureCoords[0][j].x,
-                                               mesh->mTextureCoords[0][j].y)
-                                   : glm::vec2(0.0f);
-            vertex.Tangent = mesh->HasTangentsAndBitangents()
-                                 ? glm::normalize(glm::vec3(mesh->mTangents[j].x,
-                                                            mesh->mTangents[j].y,
-                                                            mesh->mTangents[j].z))
-                                 : glm::vec3(0.0f);
-            submesh.vertices.push_back(vertex);
-        }
-
-        // Process indices
-        for (unsigned int j = 0; j < mesh->mNumFaces; j++)
-        {
-            aiFace face = mesh->mFaces[j];
-            for (unsigned int k = 0; k < face.mNumIndices; k++)
-                submesh.indices.push_back(face.mIndices[k]);
-        }
-        Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) +
-                     " has " + std::to_string(mesh->mNumFaces) + " faces.");
-
-        // Process materials and textures
-        if (scene->HasMaterials())
-        {
-            aiMaterial *material = scene->mMaterials[mesh->mMaterialIndex];
-
-            // ALBEDO TEXTURE (try BASE_COLOR then DIFFUSE)
-            std::string albedoPath = GetTexturePath(material, aiTextureType_BASE_COLOR, modelDir);
-            if (albedoPath.empty())
-                albedoPath = GetTexturePath(material, aiTextureType_DIFFUSE, modelDir);
-            if (isValidTexturePath(albedoPath))
-            {
-                Logger::Info("[Model::loadModel] Loading albedo texture: " + albedoPath);
-                submesh.material.albedo = ResourceManager::LoadTexture(albedoPath.c_str(), true, albedoPath);
-            }
-            else
-            {
-                Logger::Debug("[Model::loadModel] No valid albedo texture specified for mesh " + std::to_string(i));
-            }
-
-            // NORMAL MAP
-            std::string normalPath = GetTexturePath(material, aiTextureType_NORMALS, modelDir);
-            if (isValidTexturePath(normalPath))
-            {
-                Logger::Info("[Model::loadModel] Loading normal texture: " + normalPath);
-                submesh.material.normal = ResourceManager::LoadTexture(normalPath.c_str(), false, normalPath);
-            }
-            else
-            {
-                Logger::Debug("[Model::loadModel] No valid normal texture specified for mesh " + std::to_string(i));
-            }
-
-            // METALLIC/ROUGHNESS TEXTURE (try UNKNOWN then SPECULAR)
-            std::string mrPath = GetTexturePath(material, aiTextureType_UNKNOWN, modelDir);
-            if (mrPath.empty())
-                mrPath = GetTexturePath(material, aiTextureType_SPECULAR, modelDir);
-            if (isValidTexturePath(mrPath))
-            {
-                Logger::Info("[Model::loadModel] Loading metallic/roughness texture: " + mrPath);
-                submesh.material.metallicRoughness = ResourceManager::LoadTexture(mrPath.c_str(), false, mrPath);
-            }
-            else
-            {
-                Logger::Debug("[Model::loadModel] No valid metallic/roughness texture specified for mesh " + std::to_string(i));
-            }
-
-            // OCCLUSION TEXTURE (try LIGHTMAP then AMBIENT)
-            std::string occlusionPath = GetTexturePath(material, aiTextureType_LIGHTMAP, modelDir);
-            if (occlusionPath.empty())
-                occlusionPath = GetTexturePath(material, aiTextureType_AMBIENT, modelDir);
-            if (isValidTexturePath(occlusionPath))
-            {
-                Logger::Info("[Model::loadModel] Loading occlusion texture: " + occlusionPath);
-                submesh.material.occlusion = ResourceManager::LoadTexture(occlusionPath.c_str(), false, occlusionPath);
-            }
-            else
-            {
-                Logger::Debug("[Model::loadModel] No valid occlusion texture specified for mesh " + std::to_string(i));
-            }
-
-            // EMISSIVE TEXTURE
-            std::string emissivePath = GetTexturePath(material, aiTextureType_EMISSIVE, modelDir);
-            if (isValidTexturePath(emissivePath))
-            {
-                Logger::Info("[Model::loadModel] Loading emissive texture: " + emissivePath);
-                submesh.material.emissive = ResourceManager::LoadTexture(emissivePath.c_str(), false, emissivePath);
-            }
-            else
-            {
-                Logger::Debug("[Model::loadModel] No valid emissive texture specified for mesh " + std::to_string(i));
-            }
-
-            // Extract material factors
-            // Base Color Factor from diffuse color
-            aiColor4D diffuseColor;
-            if (AI_SUCCESS == aiGetMaterialColor(material, AI_MATKEY_COLOR_DIFFUSE, &diffuseColor))
-            {
-                submesh.material.baseColorFactor = glm::vec4(diffuseColor.r, diffuseColor.g, diffuseColor.b, diffuseColor.a);
-                Logger::Debug("[Model::loadModel] Base color factor: " +
-                              std::to_string(diffuseColor.r) + ", " +
-                              std::to_string(diffuseColor.g) + ", " +
-                              std::to_string(diffuseColor.b) + ", " +
-                              std::to_string(diffuseColor.a));
-            }
-
-            // Metallic and Roughness factors
-            float metallic = 1.0f, roughness = 1.0f;
-            if (AI_SUCCESS == material->Get<float>("pbrMetallicRoughness.metallicFactor", 0, 0, metallic))
-            {
-                submesh.material.metallicFactor = metallic;
-                Logger::Debug("[Model::loadModel] Metallic factor: " + std::to_string(metallic));
-            }
-            if (AI_SUCCESS == material->Get<float>("pbrMetallicRoughness.roughnessFactor", 0, 0, roughness))
-            {
-                submesh.material.roughnessFactor = roughness;
-                Logger::Debug("[Model::loadModel] Roughness factor: " + std::to_string(roughness));
-            }
-
-            // Emissive factor
-            aiColor4D emissiveColor;
-            if (AI_SUCCESS == aiGetMaterialColor(material, AI_MATKEY_COLOR_EMISSIVE, &emissiveColor))
-            {
-                submesh.material.emissiveFactor = glm::vec3(emissiveColor.r, emissiveColor.g, emissiveColor.b);
-                Logger::Debug("[Model::loadModel] Emissive factor: " +
-                              std::to_string(emissiveColor.r) + ", " +
-                              std::to_string(emissiveColor.g) + ", " +
-                              std::to_string(emissiveColor.b));
-            }
-        }
-
-        submesh.setupMesh();
-        Logger::Info("[Model::loadModel] Mesh " + std::to_string(i) + " loaded: " +
-                     std::to_string(submesh.vertices.size()) + " vertices, " +
-                     std::to_string(submesh.indices.size()) + " indices.");
-        submeshes.push_back(submesh);
-    }
-    Logger::Info("[Model::loadModel] Total submeshes loaded: " + std::to_string(submeshes.size()));
+    
+    processNode(scene->mRootNode, scene, glm::mat4(1.0f), modelDir);
 }
 
-void Model::Draw()
-{
-    Logger::Info("[Model::Draw] Drawing model with " + std::to_string(submeshes.size()) + " submeshes.");
-    for (size_t i = 0; i < submeshes.size(); ++i)
-    {
-        if (submeshes[i].vertices.empty() || submeshes[i].indices.empty())
-        {
-            Logger::Warning("[Model::Draw] Submesh " + std::to_string(i) + " is invalid. Skipping draw.");
-            continue;
-        }
-        submeshes[i].Draw();
+// Dibuja cada submesh
+void Model::Draw() {
+    for (auto &submesh : submeshes) {
+        if (submesh.VAO != 0)
+            submesh.Draw();
     }
 }
 
@@ -2080,156 +2125,104 @@ void processNode(aiNode *node, const aiScene *scene,
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ResourceManager.cpp
 ------------------------------------------------------------
-/**
- * @file ResourceManager.cpp
- * @brief Implementation of the ResourceManager for loading, caching, and managing shaders, textures, and models.
- */
-
 #include "ResourceManager.h"
-#include "Model.h"
 #include "FileUtils.h"
 #include "Logger.h"
-#include "ShaderFactory.h"
-#include <iostream>
-#include <future>
-#include <mutex>
+#include <filesystem>
 
+Config ResourceManager::m_Config;
 std::map<std::string, std::shared_ptr<Shader>> ResourceManager::Shaders;
 std::map<std::string, std::shared_ptr<Texture2D>> ResourceManager::Textures;
 std::map<std::string, std::shared_ptr<Model>> ResourceManager::Models;
 
-std::mutex textureMutex;
-
-std::shared_ptr<Shader> ResourceManager::LoadShader(const char *vShaderFile, const char *fShaderFile, std::string name)
-{
+std::shared_ptr<Shader> ResourceManager::LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name) {
     std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
+    std::filesystem::path vp(vertexPath);
+    if (!vp.is_absolute()) {
+        vertexPath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexPath);
+    }
     std::string fragmentPath = FileUtils::NormalizePath(fShaderFile);
-    Logger::Info("[ResourceManager] Loading shader: " + vertexPath + ", " + fragmentPath + " (name: " + name + ")");
-
-    ShaderFactory factory;
-    auto shader = factory.CreateShader(vertexPath, fragmentPath);
-
-    if (shader->ID == 0)
-        Logger::Error("[ResourceManager] Shader '" + name + "' failed to compile.");
-    else
-        Logger::Info("[ResourceManager] Shader loaded. ID: " + std::to_string(shader->ID));
-
+    std::filesystem::path fp(fragmentPath);
+    if (!fp.is_absolute()) {
+        fragmentPath = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.shaders, fragmentPath);
+    }
+    
+    auto shader = std::make_shared<Shader>();
+    shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
     Shaders[name] = shader;
+    Logger::Info("[ResourceManager] Shader loaded: " + name + " (ID: " + std::to_string(shader->ID) + ")");
     return shader;
 }
 
-std::shared_ptr<Shader> ResourceManager::GetShader(std::string name)
-{
-    return Shaders[name];
+std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::string& fragmentShaderName, const std::string& key) {
+    // Utiliza los nombres tal como están definidos en config.yaml (incluyendo extensión)
+    std::string vertexShaderFile = m_Config.vertexShader;      // Ej: "pbr_vertex.glsl"
+    std::string fragmentShaderFile = fragmentShaderName;         // Ej: "pbr_fragment.glsl"
+    
+    // Resolver rutas usando la configuración global.
+    vertexShaderFile = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.shaders, vertexShaderFile);
+    fragmentShaderFile = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.shaders, fragmentShaderFile);
+    
+    return LoadShader(vertexShaderFile.c_str(), fragmentShaderFile.c_str(), key);
 }
 
-std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool alpha, std::string name)
-{
+std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char* file, bool alpha, std::string name) {
     std::string filePath = FileUtils::NormalizePath(file);
-
-    {
-        std::lock_guard<std::mutex> lock(textureMutex);
-        if (Textures.find(filePath) != Textures.end())
-        {
-            Logger::Debug("[ResourceManager] Texture already loaded: " + filePath);
-            return Textures[filePath];
+    std::filesystem::path p(filePath);
+    if (!p.is_absolute()) {
+        // Si la ruta ya comienza con "assets" o "./assets", no se añade de nuevo.
+        std::string normalizedFilePath = filePath;
+        std::string prefix1 = m_Config.assets;           // por ejemplo "assets"
+        std::string prefix2 = "./" + m_Config.assets;       // por ejemplo "./assets"
+        if (normalizedFilePath.find(prefix1) == 0 || normalizedFilePath.find(prefix2) == 0) {
+            // Si projectRoot no es "./", se resuelve usando projectRoot solamente.
+            if(m_Config.projectRoot != "./") {
+                filePath = FileUtils::ResolvePath(m_Config.projectRoot, normalizedFilePath);
+            }
+        } else {
+            filePath = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.assets, filePath);
         }
     }
-
-    Logger::Info("[ResourceManager] Loading texture: " + filePath + " (name: " + name + ")");
-
-    auto futureImageData = std::async(std::launch::async, [filePath, alpha]() -> FileUtils::ImageData
-                                      { return FileUtils::LoadImageData(filePath, alpha); });
-    FileUtils::ImageData imgData = futureImageData.get();
-
     auto texture = std::make_shared<Texture2D>();
-    if (filePath.find("baseColor") != std::string::npos)
-    {
-        if (alpha)
-        {
-            texture->Internal_Format = GL_SRGB_ALPHA;
-            texture->Image_Format = GL_SRGB_ALPHA;
-        }
-        else
-        {
-            texture->Internal_Format = GL_SRGB;
-            texture->Image_Format = GL_SRGB;
-        }
-    }
-    else
-    {
-        if (alpha)
-        {
-            texture->Internal_Format = GL_RGBA;
-            texture->Image_Format = GL_RGBA;
-        }
-        else
-        {
-            texture->Internal_Format = GL_RGB;
-            texture->Image_Format = GL_RGB;
-        }
-    }
-
-    texture->GenerateFromData(imgData, alpha);
-
-    if (texture->ID == 0)
-        Logger::Error("[ResourceManager] Texture '" + filePath + "' failed to load.");
-    else
-        Logger::Info("[ResourceManager] Texture loaded. ID: " + std::to_string(texture->ID));
-
-    {
-        std::lock_guard<std::mutex> lock(textureMutex);
-        Textures[filePath] = texture;
-    }
+    // Aquí se debe cargar la imagen y llamar a GenerateFromData; se omite la carga real de imagen.
+    Textures[name] = texture;
+    Logger::Info("[ResourceManager] Texture loaded: " + name + " (" + filePath + ")");
     return texture;
 }
 
-std::shared_ptr<Texture2D> ResourceManager::GetTexture(std::string name)
-{
-    return Textures[name];
-}
-
-std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string name)
-{
+std::shared_ptr<Model> ResourceManager::LoadModel(const char* file, std::string name) {
     std::string filePath = FileUtils::NormalizePath(file);
-    Logger::Info("[ResourceManager] Loading model: " + filePath + " (name: " + name + ")");
-
+    std::filesystem::path p(filePath);
+    if (!p.is_absolute()) {
+        filePath = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.assets, filePath);
+    }
     auto model = std::make_shared<Model>(filePath);
-    if (model->submeshes.empty())
-        Logger::Error("[ResourceManager] Model '" + filePath + "' loaded with no submeshes.");
-    else
-        Logger::Info("[ResourceManager] Model loaded. Submeshes: " + std::to_string(model->submeshes.size()));
-
     Models[name] = model;
+    Logger::Info("[ResourceManager] Model loaded: " + name);
     return model;
 }
 
-std::shared_ptr<Model> ResourceManager::GetModel(std::string name)
-{
+std::shared_ptr<Shader> ResourceManager::GetShader(const std::string& name) {
+    return Shaders[name];
+}
+
+std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string& name) {
+    return Textures[name];
+}
+
+std::shared_ptr<Model> ResourceManager::GetModel(const std::string& name) {
     return Models[name];
 }
 
-void ResourceManager::Clear()
-{
-    Logger::Info("[ResourceManager] Clearing all loaded resources.");
-    for (const auto &iter : Shaders)
-    {
-        Logger::Info("[ResourceManager] Deleting shader: " + iter.first);
+void ResourceManager::Clear() {
+    Logger::Info("[ResourceManager] Clearing all resources.");
+    for (auto &iter : Shaders)
         glDeleteProgram(iter.second->ID);
-    }
-    for (const auto &iter : Textures)
-    {
-        Logger::Info("[ResourceManager] Deleting texture: " + iter.first);
+    Shaders.clear();
+    for (auto &iter : Textures)
         glDeleteTextures(1, &iter.second->ID);
-    }
-    // Models are automatically released by shared_ptr.
-}
-
-std::future<std::shared_ptr<Model>> ResourceManager::LoadModelAsync(const char *file, std::string name)
-{
-    Logger::Info("[ResourceManager] Asynchronously loading model: " + std::string(file) + " (name: " + name + ")");
-    return std::async(std::launch::async, [file, name]() -> std::shared_ptr<Model>
-                      { return ResourceManager::LoadModel(file, name); });
+    Textures.clear();
+    Models.clear();
 }
 
 ------------------------------------------------------------

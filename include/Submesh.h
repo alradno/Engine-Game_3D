@@ -5,42 +5,101 @@
 #include "ModelLoader.h"
 #include "Material.h"
 #include "Logger.h"
+#include "GLDebug.h"   // Para GLCall, etc.
 #include <cstddef>
 
 struct Submesh {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
     unsigned int VAO = 0;
+    unsigned int VBO = 0;
+    unsigned int EBO = 0;
     Material material;
+
+    // Constructor por defecto
+    Submesh() = default;
+
+    // Deshabilitar copia para evitar duplicar recursos
+    Submesh(const Submesh&) = delete;
+    Submesh& operator=(const Submesh&) = delete;
+
+    // Implementar constructor de movimiento
+    Submesh(Submesh&& other) noexcept {
+        vertices = std::move(other.vertices);
+        indices = std::move(other.indices);
+        VAO = other.VAO;
+        VBO = other.VBO;
+        EBO = other.EBO;
+        material = std::move(other.material);
+        other.VAO = 0;
+        other.VBO = 0;
+        other.EBO = 0;
+    }
+
+    // Implementar asignación por movimiento
+    Submesh& operator=(Submesh&& other) noexcept {
+        if (this != &other) {
+            // Liberar recursos propios
+            if(VAO != 0) GLCall(glDeleteVertexArrays(1, &VAO));
+            if(VBO != 0) GLCall(glDeleteBuffers(1, &VBO));
+            if(EBO != 0) GLCall(glDeleteBuffers(1, &EBO));
+
+            vertices = std::move(other.vertices);
+            indices = std::move(other.indices);
+            VAO = other.VAO;
+            VBO = other.VBO;
+            EBO = other.EBO;
+            material = std::move(other.material);
+
+            other.VAO = 0;
+            other.VBO = 0;
+            other.EBO = 0;
+        }
+        return *this;
+    }
+
+    // Destructor para liberar recursos OpenGL
+    ~Submesh(){
+        if(VAO != 0) {
+            GLCall(glDeleteVertexArrays(1, &VAO));
+        }
+        if(VBO != 0) {
+            GLCall(glDeleteBuffers(1, &VBO));
+        }
+        if(EBO != 0) {
+            GLCall(glDeleteBuffers(1, &EBO));
+        }
+    }
     
     void setupMesh() {
         if (vertices.empty() || indices.empty()) {
             Logger::Warning("[Submesh] No vertices or indices to setup");
             return;
         }
-        unsigned int VBO, EBO;
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
-        glGenBuffers(1, &EBO);
         
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+        GLCall(glGenVertexArrays(1, &VAO));
+        GLCall(glGenBuffers(1, &VBO));
+        GLCall(glGenBuffers(1, &EBO));
         
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+        GLCall(glBindVertexArray(VAO));
         
-        // Vertex Attributes
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
-        glEnableVertexAttribArray(3);
+        GLCall(glBindBuffer(GL_ARRAY_BUFFER, VBO));
+        GLCall(glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW));
         
-        glBindVertexArray(0);
+        GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
+        GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW));
+        
+        // Configuración de los atributos de vértice:
+        GLCall(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0));
+        GLCall(glEnableVertexAttribArray(0));
+        GLCall(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal)));
+        GLCall(glEnableVertexAttribArray(1));
+        GLCall(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords)));
+        GLCall(glEnableVertexAttribArray(2));
+        GLCall(glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent)));
+        GLCall(glEnableVertexAttribArray(3));
+        
+        GLCall(glBindVertexArray(0));
         Logger::Info("[Submesh] Setup complete (" + std::to_string(vertices.size()) + " vertices, " +
                      std::to_string(indices.size()) + " indices)");
     }
@@ -51,22 +110,22 @@ struct Submesh {
             return;
         }
         
-        // Bind textures if present
+        // Vincular texturas si están presentes
         if (material.albedo) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, material.albedo->ID);
+            GLCall(glActiveTexture(GL_TEXTURE0));
+            GLCall(glBindTexture(GL_TEXTURE_2D, material.albedo->ID));
         }
         if (material.metallicRoughness) {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID);
+            GLCall(glActiveTexture(GL_TEXTURE1));
+            GLCall(glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID));
         }
         if (material.normal) {
-            glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, material.normal->ID);
+            GLCall(glActiveTexture(GL_TEXTURE2));
+            GLCall(glBindTexture(GL_TEXTURE_2D, material.normal->ID));
         }
         
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
+        GLCall(glBindVertexArray(VAO));
+        GLCall(glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, nullptr));
+        GLCall(glBindVertexArray(0));
     }
 };

@@ -1,151 +1,172 @@
-/**
- * @file ResourceManager.cpp
- * @brief Implementation of the ResourceManager for loading, caching, and managing shaders, textures, and models.
- */
-
 #include "ResourceManager.h"
-#include "Model.h"
 #include "FileUtils.h"
 #include "Logger.h"
-#include "ShaderFactory.h"
-#include <iostream>
-#include <future>
-#include <mutex>
+#include <filesystem>
+#include "GLDebug.h"
+#include <cassert>
 
+Config ResourceManager::m_Config;
 std::map<std::string, std::shared_ptr<Shader>> ResourceManager::Shaders;
 std::map<std::string, std::shared_ptr<Texture2D>> ResourceManager::Textures;
 std::map<std::string, std::shared_ptr<Model>> ResourceManager::Models;
 
-std::mutex textureMutex;
-
 std::shared_ptr<Shader> ResourceManager::LoadShader(const char *vShaderFile, const char *fShaderFile, std::string name)
 {
-    std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
-    std::string fragmentPath = FileUtils::NormalizePath(fShaderFile);
-    Logger::Info("[ResourceManager] Loading shader: " + vertexPath + ", " + fragmentPath + " (name: " + name + ")");
+    try
+    {
+        std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
+        std::filesystem::path vp(vertexPath);
+        if (!vp.is_absolute())
+        {
+            vertexPath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexPath);
+        }
+        std::string fragmentPath = FileUtils::NormalizePath(fShaderFile);
+        std::filesystem::path fp(fragmentPath);
+        if (!fp.is_absolute())
+        {
+            fragmentPath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, fragmentPath);
+        }
 
-    ShaderFactory factory;
-    auto shader = factory.CreateShader(vertexPath, fragmentPath);
-
-    if (shader->ID == 0)
-        Logger::Error("[ResourceManager] Shader '" + name + "' failed to compile.");
-    else
-        Logger::Info("[ResourceManager] Shader loaded. ID: " + std::to_string(shader->ID));
-
-    Shaders[name] = shader;
-    return shader;
+        auto shader = std::make_shared<Shader>();
+        shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
+        Shaders[name] = shader;
+        Logger::Info("[ResourceManager] Shader loaded: " + name + " (ID: " + std::to_string(shader->ID) + ")");
+        return shader;
+    }
+    catch (const std::exception &e)
+    {
+        Logger::Error("[ResourceManager] Exception while loading shader: " + std::string(e.what()));
+        return nullptr;
+    }
 }
 
-std::shared_ptr<Shader> ResourceManager::GetShader(std::string name)
+std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::string &fragmentShaderName, const std::string &key)
 {
-    return Shaders[name];
+    try
+    {
+        std::string vertexShaderFile = m_Config.vertexShader; // Ejemplo: "pbr_vertex.glsl"
+        std::string fragmentShaderFile = fragmentShaderName;  // Ejemplo: "pbr_fragment.glsl"
+
+        // Resolver rutas usando la configuración global.
+        vertexShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexShaderFile);
+        fragmentShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, fragmentShaderFile);
+
+        return LoadShader(vertexShaderFile.c_str(), fragmentShaderFile.c_str(), key);
+    }
+    catch (const std::exception &e)
+    {
+        Logger::Error("[ResourceManager] Exception in LoadShaderWithFragment: " + std::string(e.what()));
+        return nullptr;
+    }
 }
 
 std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool alpha, std::string name)
 {
-    std::string filePath = FileUtils::NormalizePath(file);
-
+    try
     {
-        std::lock_guard<std::mutex> lock(textureMutex);
-        if (Textures.find(filePath) != Textures.end())
+        std::string filePath = FileUtils::NormalizePath(file);
+        std::filesystem::path p(filePath);
+        if (!p.is_absolute())
         {
-            Logger::Debug("[ResourceManager] Texture already loaded: " + filePath);
-            return Textures[filePath];
+            std::string normalizedFilePath = filePath;
+            std::string prefix1 = m_Config.assets;
+            std::string prefix2 = "./" + m_Config.assets;
+            if (normalizedFilePath.find(prefix1) == 0 || normalizedFilePath.find(prefix2) == 0)
+            {
+                if (m_Config.projectRoot != "./")
+                {
+                    filePath = FileUtils::ResolvePath(m_Config.projectRoot, normalizedFilePath);
+                }
+            }
+            else
+            {
+                filePath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.assets, filePath);
+            }
         }
-    }
 
-    Logger::Info("[ResourceManager] Loading texture: " + filePath + " (name: " + name + ")");
+        Logger::Debug("[ResourceManager] Cargando imagen desde: " + filePath);
 
-    auto futureImageData = std::async(std::launch::async, [filePath, alpha]() -> FileUtils::ImageData
-                                      { return FileUtils::LoadImageData(filePath, alpha); });
-    FileUtils::ImageData imgData = futureImageData.get();
+        auto texture = std::make_shared<Texture2D>();
 
-    auto texture = std::make_shared<Texture2D>();
-    if (filePath.find("baseColor") != std::string::npos)
-    {
-        if (alpha)
+        // Forzar el número de canales según 'alpha'
+        int width, height, nrChannels;
+        unsigned char *data = stbi_load(filePath.c_str(), &width, &height, &nrChannels, alpha ? 4 : 3);
+        // Assertion para asegurarse de que se cargó la imagen.
+        assert(data && "Error: Los datos de la imagen son nulos tras stbi_load.");
+        if (data)
         {
-            texture->Internal_Format = GL_SRGB_ALPHA;
-            texture->Image_Format = GL_SRGB_ALPHA;
+            Logger::Debug("[ResourceManager] Imagen cargada: " + filePath +
+                          " (" + std::to_string(width) + "x" + std::to_string(height) +
+                          ", canales: " + std::to_string(nrChannels) + ")");
+            FileUtils::ImageData imgData;
+            imgData.data = data;
+            imgData.width = width;
+            imgData.height = height;
+            imgData.channels = nrChannels;
+            texture->GenerateFromData(imgData, alpha);
         }
         else
         {
-            texture->Internal_Format = GL_SRGB;
-            texture->Image_Format = GL_SRGB;
+            Logger::Error("[ResourceManager] Failed to load image: " + filePath);
+            return nullptr;
         }
+
+        Textures[name] = texture;
+        Logger::Info("[ResourceManager] Texture loaded: " + name + " (" + filePath + ")");
+        return texture;
     }
-    else
+    catch (const std::exception &e)
     {
-        if (alpha)
-        {
-            texture->Internal_Format = GL_RGBA;
-            texture->Image_Format = GL_RGBA;
-        }
-        else
-        {
-            texture->Internal_Format = GL_RGB;
-            texture->Image_Format = GL_RGB;
-        }
+        Logger::Error("[ResourceManager] Exception while loading texture: " + std::string(e.what()));
+        return nullptr;
     }
-
-    texture->GenerateFromData(imgData, alpha);
-
-    if (texture->ID == 0)
-        Logger::Error("[ResourceManager] Texture '" + filePath + "' failed to load.");
-    else
-        Logger::Info("[ResourceManager] Texture loaded. ID: " + std::to_string(texture->ID));
-
-    {
-        std::lock_guard<std::mutex> lock(textureMutex);
-        Textures[filePath] = texture;
-    }
-    return texture;
-}
-
-std::shared_ptr<Texture2D> ResourceManager::GetTexture(std::string name)
-{
-    return Textures[name];
 }
 
 std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string name)
 {
-    std::string filePath = FileUtils::NormalizePath(file);
-    Logger::Info("[ResourceManager] Loading model: " + filePath + " (name: " + name + ")");
-
-    auto model = std::make_shared<Model>(filePath);
-    if (model->submeshes.empty())
-        Logger::Error("[ResourceManager] Model '" + filePath + "' loaded with no submeshes.");
-    else
-        Logger::Info("[ResourceManager] Model loaded. Submeshes: " + std::to_string(model->submeshes.size()));
-
-    Models[name] = model;
-    return model;
+    try
+    {
+        std::string filePath = FileUtils::NormalizePath(file);
+        std::filesystem::path p(filePath);
+        if (!p.is_absolute())
+        {
+            filePath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.assets, filePath);
+        }
+        auto model = std::make_shared<Model>(filePath);
+        Models[name] = model;
+        Logger::Info("[ResourceManager] Model loaded: " + name);
+        return model;
+    }
+    catch (const std::exception &e)
+    {
+        Logger::Error("[ResourceManager] Exception while loading model: " + std::string(e.what()));
+        return nullptr;
+    }
 }
 
-std::shared_ptr<Model> ResourceManager::GetModel(std::string name)
+std::shared_ptr<Shader> ResourceManager::GetShader(const std::string &name)
+{
+    return Shaders[name];
+}
+
+std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string &name)
+{
+    return Textures[name];
+}
+
+std::shared_ptr<Model> ResourceManager::GetModel(const std::string &name)
 {
     return Models[name];
 }
 
 void ResourceManager::Clear()
 {
-    Logger::Info("[ResourceManager] Clearing all loaded resources.");
-    for (const auto &iter : Shaders)
-    {
-        Logger::Info("[ResourceManager] Deleting shader: " + iter.first);
-        glDeleteProgram(iter.second->ID);
-    }
-    for (const auto &iter : Textures)
-    {
-        Logger::Info("[ResourceManager] Deleting texture: " + iter.first);
-        glDeleteTextures(1, &iter.second->ID);
-    }
-    // Models are automatically released by shared_ptr.
-}
-
-std::future<std::shared_ptr<Model>> ResourceManager::LoadModelAsync(const char *file, std::string name)
-{
-    Logger::Info("[ResourceManager] Asynchronously loading model: " + std::string(file) + " (name: " + name + ")");
-    return std::async(std::launch::async, [file, name]() -> std::shared_ptr<Model>
-                      { return ResourceManager::LoadModel(file, name); });
+    Logger::Info("[ResourceManager] Clearing all resources.");
+    for (auto &iter : Shaders)
+        GLCall(glDeleteProgram(iter.second->ID));
+    Shaders.clear();
+    for (auto &iter : Textures)
+        GLCall(glDeleteTextures(1, &iter.second->ID));
+    Textures.clear();
+    Models.clear();
 }

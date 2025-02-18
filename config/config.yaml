@@ -1,0 +1,15 @@
+# config.yaml - Configuración global del motor
+projectRoot: "./"
+assets: "assets"        
+shaders: "shaders"
+vertexShader: "pbr_vertex.glsl"     
+defaultShader: "pbr_fragment.glsl"
+render:
+  ambientColor: [0.2, 0.2, 0.2]
+lights:
+  - type: point
+    position: [5.0, 5.0, 5.0]
+    color: [1.0, 0.5, 0.5]
+  - type: point
+    position: [-5.0, 5.0, 5.0]
+    color: [1.0, 1.0, 1.0]
