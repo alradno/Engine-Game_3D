@@ -17,7 +17,8 @@ public:
     }
     
     void UpdateUBO() {
-        Logger::Info("[LightManager] Updating UBO");
+        // Se usa throttling para evitar loguear cada frame.
+        Logger::ThrottledLog("LightManager_UpdateUBO", LogLevel::INFO, "[LightManager] Updating UBO", 0.5);
         constexpr int maxLights = 10;
         std::vector<Light> lightData(maxLights);
         for (int i = 0; i < maxLights; i++) {
@@ -35,8 +36,9 @@ public:
         lightUBO.Bind();
         glBufferData(GL_UNIFORM_BUFFER, dataSize, lightData.data(), GL_DYNAMIC_DRAW);
         lightUBO.Unbind();
-        Logger::Info("[LightManager] UBO updated (" + std::to_string(lights.size()) +
-                     " active lights, max " + std::to_string(maxLights) + ").");
+        Logger::ThrottledLog("LightManager_UBOUpdated", LogLevel::INFO,
+            "[LightManager] UBO updated (" + std::to_string(lights.size()) +
+            " active lights, max " + std::to_string(maxLights) + ").", 0.5);
     }
     
     void AddLight(const Light& light) {

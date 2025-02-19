@@ -38,18 +38,18 @@ public:
         float velocity = 2.5f * deltaTime;
         if (direction == 'W') {
             Position += Front * velocity;
-            Logger::Debug("[Camera] Moved forward");
+            Logger::ThrottledLog("Camera_MovedForward", LogLevel::DEBUG, "[Camera] Moved forward", 0.5);
         } else if (direction == 'S') {
             Position -= Front * velocity;
-            Logger::Debug("[Camera] Moved backward");
+            Logger::ThrottledLog("Camera_MovedBackward", LogLevel::DEBUG, "[Camera] Moved backward", 0.5);
         } else if (direction == 'A') {
             glm::vec3 left = glm::normalize(glm::cross(Front, Up));
             Position -= left * velocity;
-            Logger::Debug("[Camera] Moved left");
+            Logger::ThrottledLog("Camera_MovedLeft", LogLevel::DEBUG, "[Camera] Moved left", 0.5);
         } else if (direction == 'D') {
             glm::vec3 right = glm::normalize(glm::cross(Front, Up));
             Position += right * velocity;
-            Logger::Debug("[Camera] Moved right");
+            Logger::ThrottledLog("Camera_MovedRight", LogLevel::DEBUG, "[Camera] Moved right", 0.5);
         }
     }
     
@@ -63,7 +63,7 @@ public:
         if (Pitch > 89.0f)  Pitch = 89.0f;
         if (Pitch < -89.0f) Pitch = -89.0f;
         UpdateCameraVectors();
-        Logger::Debug("[Camera] Updated orientation from mouse movement");
+        Logger::ThrottledLog("Camera_MouseMovement", LogLevel::DEBUG, "[Camera] Updated orientation from mouse movement", 0.5);
     }
     
 private:

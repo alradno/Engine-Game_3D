@@ -41,23 +41,30 @@ inline void APIENTRY OpenGLDebugCallback(GLenum source, GLenum type, GLuint id,
 {
     std::ostringstream oss;
     oss << "[OpenGL Debug] " << message;
+    std::string logMsg = oss.str();
+    // Usar el id del mensaje en la key para distinguir distintos avisos
+    std::string key = "OpenGL_Debug_" + std::to_string(id);
 
-    // Filtra o clasifica según la severidad:
+    // Se asignan intervalos según la severidad:
     if (severity == GL_DEBUG_SEVERITY_HIGH)
     {
-        Logger::Error(oss.str());
+        // Mensajes críticos: se muestran como error, pero solo cada 5 segundos.
+        Logger::ThrottledLog(key, LogLevel::ERROR, logMsg, 5.0);
     }
     else if (severity == GL_DEBUG_SEVERITY_MEDIUM)
     {
-        Logger::Warning(oss.str());
+        // Advertencias de nivel medio: se muestran como warning, cada 2 segundos.
+        Logger::ThrottledLog(key, LogLevel::WARNING, logMsg, 2.0);
     }
     else if (severity == GL_DEBUG_SEVERITY_LOW)
     {
-        Logger::Info(oss.str());
+        // Advertencias de nivel bajo: se muestran como info, cada 0.5 segundos.
+        Logger::ThrottledLog(key, LogLevel::INFO, logMsg, 0.5);
     }
     else
     { // GL_DEBUG_SEVERITY_NOTIFICATION
-        Logger::Debug(oss.str());
+        // Notificaciones: se muestran como debug, cada 0.5 segundos.
+        Logger::ThrottledLog(key, LogLevel::DEBUG, logMsg, 0.5);
     }
 }
 

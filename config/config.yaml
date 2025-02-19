@@ -1,5 +1,6 @@
 # config.yaml - Configuración global del motor
 projectRoot: "./"
+limitLog: yes
 assets: "assets"        
 shaders: "shaders"
 vertexShader: "pbr_vertex.glsl"     

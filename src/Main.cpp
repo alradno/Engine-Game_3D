@@ -47,8 +47,10 @@ void glfwErrorCallback(int error, const char *description)
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     GLCall(glViewport(0, 0, width, height));
-    Logger::Debug("Framebuffer resized: width = " + std::to_string(width) +
-                  ", height = " + std::to_string(height));
+    Logger::ThrottledLog("Main_FramebufferResize", LogLevel::DEBUG,
+                         "Framebuffer resized: width = " + std::to_string(width) +
+                             ", height = " + std::to_string(height),
+                         0.5);
 }
 
 int main()
@@ -207,11 +209,13 @@ int main()
             GLenum fbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if (fbStatus != GL_FRAMEBUFFER_COMPLETE)
             {
-                Logger::Warning("[Main] Framebuffer incomplete: " + std::to_string(fbStatus));
+                Logger::ThrottledLog("Main_FramebufferIncomplete", LogLevel::WARNING,
+                                     "[Main] Framebuffer incomplete: " + std::to_string(fbStatus), 0.5);
             }
             else
             {
-                Logger::Debug("[Main] Framebuffer complete.");
+                Logger::ThrottledLog("Main_FramebufferComplete", LogLevel::DEBUG,
+                                     "[Main] Framebuffer complete.", 0.5);
             }
 
             glfwSwapBuffers(window);

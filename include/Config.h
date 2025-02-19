@@ -15,6 +15,7 @@ class Config {
 public:
     // Parámetros globales
     std::string projectRoot;
+    std::string limitLog;      // yes o no
     std::string assets;        // Directorio base para assets
     std::string shaders;       // Directorio de shaders
     std::string vertexShader;  // Nombre del vertex shader global (sin extensión)

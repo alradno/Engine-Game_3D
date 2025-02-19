@@ -3,6 +3,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\config\config.yaml
 ------------------------------------------------------------
 # config.yaml - Configuración global del motor
 projectRoot: "./"
+limitLog: yes
 assets: "assets"        
 shaders: "shaders"
 vertexShader: "pbr_vertex.glsl"     
@@ -27,18 +28,16 @@ entities:
       rotation: [0.0, 0.0, 0.0]
       scale: [0.02, 0.02, 0.02]
     render:
-      # La ruta es relativa a la carpeta assets definida en config.yaml
       model: "car/scene.gltf"
       shader: "pbr_fragment.glsl"
 
-  # Puedes definir más entidades, por ejemplo:
   # - transform:
-  #     translation: [10.0, 0.0, 0.0]
+  #     translation: [0.0, 0.0, 0.0]
   #     rotation: [0.0, 0.0, 0.0]
-  #     scale: [0.02, 0.02, 0.02]
+  #     scale: [3.0, 3.0, 3.0]
   #   render:
   #     model: "porsche/scene.gltf"
-  #     shader: "pbr_fragment"
+  #     shader: "pbr_fragment.glsl"
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Camera.h
@@ -83,18 +82,18 @@ public:
         float velocity = 2.5f * deltaTime;
         if (direction == 'W') {
             Position += Front * velocity;
-            Logger::Debug("[Camera] Moved forward");
+            Logger::ThrottledLog("Camera_MovedForward", LogLevel::DEBUG, "[Camera] Moved forward", 0.5);
         } else if (direction == 'S') {
             Position -= Front * velocity;
-            Logger::Debug("[Camera] Moved backward");
+            Logger::ThrottledLog("Camera_MovedBackward", LogLevel::DEBUG, "[Camera] Moved backward", 0.5);
         } else if (direction == 'A') {
             glm::vec3 left = glm::normalize(glm::cross(Front, Up));
             Position -= left * velocity;
-            Logger::Debug("[Camera] Moved left");
+            Logger::ThrottledLog("Camera_MovedLeft", LogLevel::DEBUG, "[Camera] Moved left", 0.5);
         } else if (direction == 'D') {
             glm::vec3 right = glm::normalize(glm::cross(Front, Up));
             Position += right * velocity;
-            Logger::Debug("[Camera] Moved right");
+            Logger::ThrottledLog("Camera_MovedRight", LogLevel::DEBUG, "[Camera] Moved right", 0.5);
         }
     }
     
@@ -108,7 +107,7 @@ public:
         if (Pitch > 89.0f)  Pitch = 89.0f;
         if (Pitch < -89.0f) Pitch = -89.0f;
         UpdateCameraVectors();
-        Logger::Debug("[Camera] Updated orientation from mouse movement");
+        Logger::ThrottledLog("Camera_MouseMovement", LogLevel::DEBUG, "[Camera] Updated orientation from mouse movement", 0.5);
     }
     
 private:
@@ -229,6 +228,7 @@ class Config {
 public:
     // Parámetros globales
     std::string projectRoot;
+    std::string limitLog;      // yes o no
     std::string assets;        // Directorio base para assets
     std::string shaders;       // Directorio de shaders
     std::string vertexShader;  // Nombre del vertex shader global (sin extensión)
@@ -365,8 +365,7 @@ namespace ECS
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ECSPlayerController.h
 ------------------------------------------------------------
-#ifndef ECSPLAYERCONTROLLER_H
-#define ECSPLAYERCONTROLLER_H
+#pragma once
 
 #include "Coordinator.h"
 #include "TransformComponent.h"
@@ -382,8 +381,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ECSPlayerController.h
  *
  * Separamos el offset base (definido en el YAML) del giro dinámico, pero en lugar de
  * simplemente sumar la entrada, usamos una variable de velocidad angular para simular
- * aceleración y damping. Así, al mantener pulsada la tecla, se acelera hasta un máximo,
- * y al soltarla la velocidad angular se amortigua.
+ * aceleración y damping.
  *
  * La orientación efectiva se calcula como:
  *
@@ -402,18 +400,15 @@ public:
         : mCoordinator(coordinator),
           mEntity(entity),
           m_MoveSpeed(20.0f),
-          m_MaxAngularSpeed(600.0f),  // Máxima velocidad angular en grados/segundo
-          m_Damping(5.0f),           // Factor de damping para desacelerar
+          m_MaxAngularSpeed(600.0f),
+          m_Damping(5.0f),
           m_InvertControls(invertControls),
           m_DynamicYaw(0.0f),
           m_AngularVelocity(0.0f)
     {
         auto& transform = mCoordinator->GetComponent<TransformComponent>(mEntity);
-        // Se guarda el offset base en yaw definido en el YAML.
-        // Por ejemplo, en tu YAML: rotation: [-90.0, 180.0, 0.0] → baseYawOffset = 180°
         m_BaseYawOffset = transform.rotation.y;
         Logger::Debug("[ECSPlayerController] Constructor: baseYawOffset = " + std::to_string(m_BaseYawOffset));
-        // Inicializamos la rotación efectiva
         float effectiveYaw = m_BaseYawOffset + m_DynamicYaw;
         transform.rotation.y = effectiveYaw;
         transform.UpdateTransform();
@@ -427,50 +422,49 @@ public:
         // --- Procesamiento de la entrada de giro ---
         float turnInput = 0.0f;
         if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-            turnInput -= 1.0f;  // Gira a la izquierda
+            turnInput -= 1.0f;
         if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-            turnInput += 1.0f;  // Gira a la derecha
-        // Si se desea invertir la entrada, se aplica el flag
+            turnInput += 1.0f;
         if (m_InvertControls)
             turnInput = -turnInput;
-        Logger::Debug("[ECSPlayerController] turnInput = " + std::to_string(turnInput));
+        // Se usa ThresholdLog para valores numéricos que varían con cada frame.
+        Logger::ThresholdLog<float>("ECSPlayerController_turnInput", turnInput, 0.01f, LogLevel::DEBUG,
+            "[ECSPlayerController] turnInput = " + std::to_string(turnInput), 0.5);
         
-        // Calculamos aceleración angular a partir de la entrada
-        float angularAcceleration = turnInput * m_MaxAngularSpeed; // valor en grados/segundo²
-        // Actualizamos la velocidad angular con aceleración
+        // Calculamos aceleración angular
+        float angularAcceleration = turnInput * m_MaxAngularSpeed;
         m_AngularVelocity += angularAcceleration * dt;
-        // Aplicamos damping para amortiguar cuando no hay entrada
         m_AngularVelocity -= m_AngularVelocity * m_Damping * dt;
-        // Limitamos la velocidad angular al máximo
         if (m_AngularVelocity > m_MaxAngularSpeed)
             m_AngularVelocity = m_MaxAngularSpeed;
         if (m_AngularVelocity < -m_MaxAngularSpeed)
             m_AngularVelocity = -m_MaxAngularSpeed;
-        Logger::Debug("[ECSPlayerController] Angular velocity = " + std::to_string(m_AngularVelocity));
+        Logger::ThresholdLog<float>("ECSPlayerController_AngularVelocity", m_AngularVelocity, 0.01f, LogLevel::DEBUG,
+            "[ECSPlayerController] Angular velocity = " + std::to_string(m_AngularVelocity), 0.5);
         
-        // Integramos la velocidad angular para actualizar el ángulo dinámico
+        // Integración de la velocidad angular
         m_DynamicYaw += m_AngularVelocity * dt;
-        // Normalizamos dynamicYaw para evitar valores excesivos
         m_DynamicYaw = fmod(m_DynamicYaw, 360.0f);
-        Logger::Debug("[ECSPlayerController] dynamicYaw = " + std::to_string(m_DynamicYaw));
+        Logger::ThresholdLog<float>("ECSPlayerController_dynamicYaw", m_DynamicYaw, 0.01f, LogLevel::DEBUG,
+            "[ECSPlayerController] dynamicYaw = " + std::to_string(m_DynamicYaw), 0.5);
         
-        // Calculamos el yaw efectivo combinando el offset base y el ángulo dinámico
         float effectiveYaw = m_BaseYawOffset + m_DynamicYaw;
-        Logger::Debug("[ECSPlayerController] effectiveYaw = " + std::to_string(effectiveYaw));
+        Logger::ThresholdLog<float>("ECSPlayerController_effectiveYaw", effectiveYaw, 0.01f, LogLevel::DEBUG,
+            "[ECSPlayerController] effectiveYaw = " + std::to_string(effectiveYaw), 0.5);
         transform.rotation.y = effectiveYaw;
         
         // --- Cálculo del vector forward ---
         float yawRadians = glm::radians(effectiveYaw);
         glm::vec3 forward;
-        // Con effectiveYaw = 180° y dynamicYaw = 0, forward = (0, 0, -1) (según la convención que deseas)
         forward.x = sin(yawRadians);
         forward.y = 0.0f;
         forward.z = cos(yawRadians);
         forward = glm::normalize(forward);
-        Logger::Debug("[ECSPlayerController] forward vector = (" +
-                      std::to_string(forward.x) + ", " +
-                      std::to_string(forward.y) + ", " +
-                      std::to_string(forward.z) + ")");
+        Logger::ThrottledLog("ECSPlayerController_forward", LogLevel::DEBUG,
+            "[ECSPlayerController] forward vector = (" +
+            std::to_string(forward.x) + ", " +
+            std::to_string(forward.y) + ", " +
+            std::to_string(forward.z) + ")", 0.5);
         
         // --- Procesamiento del movimiento ---
         float moveInput = 0.0f;
@@ -478,35 +472,37 @@ public:
             moveInput += 1.0f;
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
             moveInput -= 1.0f;
-        Logger::Debug("[ECSPlayerController] moveInput = " + std::to_string(moveInput));
+        Logger::ThrottledLog("ECSPlayerController_moveInput", LogLevel::DEBUG,
+            "[ECSPlayerController] moveInput = " + std::to_string(moveInput), 0.5);
         
-        Logger::Debug("[ECSPlayerController] translation antes = (" +
-                      std::to_string(transform.translation.x) + ", " +
-                      std::to_string(transform.translation.y) + ", " +
-                      std::to_string(transform.translation.z) + ")");
+        Logger::ThrottledLog("ECSPlayerController_translationAntes", LogLevel::DEBUG,
+            "[ECSPlayerController] translation antes = (" +
+            std::to_string(transform.translation.x) + ", " +
+            std::to_string(transform.translation.y) + ", " +
+            std::to_string(transform.translation.z) + ")", 0.5);
+        
         transform.translation += forward * moveInput * m_MoveSpeed * dt;
-        Logger::Debug("[ECSPlayerController] translation después = (" +
-                      std::to_string(transform.translation.x) + ", " +
-                      std::to_string(transform.translation.y) + ", " +
-                      std::to_string(transform.translation.z) + ")");
         
-        // Actualizamos la transformación final (T * R * S).
+        Logger::ThrottledLog("ECSPlayerController_translationDespues", LogLevel::DEBUG,
+            "[ECSPlayerController] translation después = (" +
+            std::to_string(transform.translation.x) + ", " +
+            std::to_string(transform.translation.y) + ", " +
+            std::to_string(transform.translation.z) + ")", 0.5);
+        
         transform.UpdateTransform();
     }
     
 private:
     Coordinator* mCoordinator;
     ECS::Entity mEntity;
-    float m_MoveSpeed;        // Velocidad de movimiento (unidades/segundo)
-    float m_MaxAngularSpeed;  // Máxima velocidad angular en grados/segundo
-    float m_Damping;          // Factor de damping para desacelerar la velocidad angular
-    bool m_InvertControls;    // Si es true, se invierte la entrada de giro
-    float m_BaseYawOffset;    // Offset base proveniente del YAML (por ejemplo, 180°)
-    float m_DynamicYaw;       // Ángulo dinámico de giro, acumulado a partir de la velocidad angular
-    float m_AngularVelocity;  // Velocidad angular actual (grados/segundo)
+    float m_MoveSpeed;        
+    float m_MaxAngularSpeed;  
+    float m_Damping;          
+    bool m_InvertControls;    
+    float m_BaseYawOffset;    
+    float m_DynamicYaw;       
+    float m_AngularVelocity;  
 };
-
-#endif // ECSPLAYERCONTROLLER_H
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\EntityLoader.h
@@ -602,35 +598,121 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\FileUtils.h
 #include <filesystem>
 #include "Logger.h"
 
-namespace FileUtils {
+namespace FileUtils
+{
 
-inline std::string NormalizePath(const std::string& path) {
-    std::filesystem::path p(path);
-    std::string normalized = p.generic_string();
-    Logger::Debug("[FileUtils] Normalized path: " + normalized);
-    return normalized;
-}
+    inline std::string NormalizePath(const std::string &path)
+    {
+        std::filesystem::path p(path);
+        std::string normalized = p.generic_string();
+        Logger::Debug("[FileUtils] Normalized path: " + normalized);
+        return normalized;
+    }
 
-inline std::string ResolvePath(const std::string& base, const std::string& relative) {
-    std::string rel = relative;
-    if (!rel.empty() && rel.front() == '/')
-        rel.erase(0, 1);
-    std::filesystem::path basePath(base);
-    std::filesystem::path fullPath = basePath / rel;
-    std::string resolved = fullPath.generic_string();
-    Logger::Debug("[FileUtils] Resolved path: " + resolved);
-    return resolved;
-}
+    inline std::string ResolvePath(const std::string &base, const std::string &relative)
+    {
+        std::string rel = relative;
+        if (!rel.empty() && rel.front() == '/')
+            rel.erase(0, 1);
+        std::filesystem::path basePath(base);
+        std::filesystem::path fullPath = basePath / rel;
+        std::string resolved = fullPath.generic_string();
+        Logger::Debug("[FileUtils] Resolved path: " + resolved);
+        return resolved;
+    }
 
-// Definición de la estructura para la carga de imágenes
-struct ImageData {
-    unsigned char* data = nullptr;
-    int width = 0;
-    int height = 0;
-    int channels = 0;
-};
+    // Estructura para la carga de imágenes.
+    struct ImageData
+    {
+        unsigned char *data = nullptr;
+        int width = 0;
+        int height = 0;
+        int channels = 0;
+    };
 
 } // namespace FileUtils
+
+------------------------------------------------------------
+Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\GLDebug.h
+------------------------------------------------------------
+#pragma once
+#include <glad/glad.h>
+#include "Logger.h"
+#include <sstream>
+
+// Función para limpiar todos los errores previos de OpenGL.
+inline void GLClearError()
+{
+    while (glGetError() != GL_NO_ERROR)
+        ;
+}
+
+// Función para loguear errores en las llamadas a OpenGL.
+inline bool GLLogCall(const char *function, const char *file, int line)
+{
+    bool success = true;
+    while (GLenum error = glGetError())
+    {
+        std::ostringstream oss;
+        oss << "[OpenGL Error] (" << error << "): " << function << " in " << file << ":" << line;
+        Logger::Error(oss.str());
+        success = false;
+    }
+    return success;
+}
+
+#ifdef _DEBUG
+// Macro usando una lambda de invocación inmediata para encapsular todas las instrucciones.
+#define GLCall(x) ([&]() { \
+        GLClearError(); \
+        x; \
+        if (!GLLogCall(#x, __FILE__, __LINE__)) { __debugbreak(); } }())
+#else
+#define GLCall(x) x
+#endif
+
+// Callback para mensajes de depuración de OpenGL (funciona si el driver lo soporta).
+inline void APIENTRY OpenGLDebugCallback(GLenum source, GLenum type, GLuint id,
+                                         GLenum severity, GLsizei length,
+                                         const GLchar *message, const void *userParam)
+{
+    std::ostringstream oss;
+    oss << "[OpenGL Debug] " << message;
+    std::string logMsg = oss.str();
+    // Usar el id del mensaje en la key para distinguir distintos avisos
+    std::string key = "OpenGL_Debug_" + std::to_string(id);
+
+    // Se asignan intervalos según la severidad:
+    if (severity == GL_DEBUG_SEVERITY_HIGH)
+    {
+        // Mensajes críticos: se muestran como error, pero solo cada 5 segundos.
+        Logger::ThrottledLog(key, LogLevel::ERROR, logMsg, 5.0);
+    }
+    else if (severity == GL_DEBUG_SEVERITY_MEDIUM)
+    {
+        // Advertencias de nivel medio: se muestran como warning, cada 2 segundos.
+        Logger::ThrottledLog(key, LogLevel::WARNING, logMsg, 2.0);
+    }
+    else if (severity == GL_DEBUG_SEVERITY_LOW)
+    {
+        // Advertencias de nivel bajo: se muestran como info, cada 0.5 segundos.
+        Logger::ThrottledLog(key, LogLevel::INFO, logMsg, 0.5);
+    }
+    else
+    { // GL_DEBUG_SEVERITY_NOTIFICATION
+        // Notificaciones: se muestran como debug, cada 0.5 segundos.
+        Logger::ThrottledLog(key, LogLevel::DEBUG, logMsg, 0.5);
+    }
+}
+
+// Función para configurar el callback de depuración de OpenGL.
+inline void SetupOpenGLDebugCallback()
+{
+    glEnable(GL_DEBUG_OUTPUT);
+    glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+    glDebugMessageCallback(OpenGLDebugCallback, nullptr);
+    glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+}
 
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\IShaderFactory.h
@@ -705,7 +787,8 @@ public:
     }
     
     void UpdateUBO() {
-        Logger::Info("[LightManager] Updating UBO");
+        // Se usa throttling para evitar loguear cada frame.
+        Logger::ThrottledLog("LightManager_UpdateUBO", LogLevel::INFO, "[LightManager] Updating UBO", 0.5);
         constexpr int maxLights = 10;
         std::vector<Light> lightData(maxLights);
         for (int i = 0; i < maxLights; i++) {
@@ -723,8 +806,9 @@ public:
         lightUBO.Bind();
         glBufferData(GL_UNIFORM_BUFFER, dataSize, lightData.data(), GL_DYNAMIC_DRAW);
         lightUBO.Unbind();
-        Logger::Info("[LightManager] UBO updated (" + std::to_string(lights.size()) +
-                     " active lights, max " + std::to_string(maxLights) + ").");
+        Logger::ThrottledLog("LightManager_UBOUpdated", LogLevel::INFO,
+            "[LightManager] UBO updated (" + std::to_string(lights.size()) +
+            " active lights, max " + std::to_string(maxLights) + ").", 0.5);
     }
     
     void AddLight(const Light& light) {
@@ -743,7 +827,11 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Logger.h
 ------------------------------------------------------------
 /**
  * @file Logger.h
- * @brief Logger singleton that writes logs to a main file (all messages) as well as separate files for INFO, DEBUG, and ERROR messages.
+ * @brief Logger singleton que escribe logs a un archivo principal y archivos separados para INFO, DEBUG, WARNING y ERROR.
+ *
+ * Se ha extendido para incluir funciones de throttling y threshold que permiten emitir mensajes
+ * solo cuando han pasado cierto tiempo o cuando los valores cambian de forma significativa.
+ * Además, se incluye el parámetro "limitLog" (yes/no) para habilitar o deshabilitar la limitación de logs.
  */
 
 #pragma once
@@ -751,8 +839,11 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Logger.h
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <mutex>
+#include <mutex> // Usamos std::recursive_mutex
 #include <string>
+#include <unordered_map>
+#include <chrono>
+#include <cmath>
 
 enum class LogLevel
 {
@@ -765,27 +856,30 @@ enum class LogLevel
 class Logger
 {
 public:
-    // Set the minimum log level to output messages.
+    // Permite habilitar o deshabilitar la limitación de logs (throttling y threshold).
+    // Si limitLog es true, se aplican las limitaciones; si es false, se loguea todo sin throttling.
+    static void SetLimitLog(bool limit)
+    {
+        instance().limitLog = limit;
+    }
+
+    // Funciones para configurar el nivel y los archivos de log
     static void SetLogLevel(LogLevel level)
     {
         instance().minLevel = level;
     }
 
-    /**
-     * @brief Sets the main log file and automatically creates three additional log files for INFO, DEBUG, and ERROR messages.
-     * @param filename The name of the main log file.
-     */
     static void SetLogFile(const std::string &filename)
     {
-        std::lock_guard<std::mutex> lock(instance().mutex_);
-        // Open the main log file
+        std::lock_guard<std::recursive_mutex> lock(instance().mutex_);
+        // Abrir el archivo principal
         instance().logFile.open(filename, std::ios::out | std::ios::trunc);
         if (!instance().logFile.is_open())
         {
             std::cerr << "[Logger] ERROR: Could not open log file: " << filename << std::endl;
         }
 
-        // Helper lambda to generate file name with suffix
+        // Lambda para obtener el nombre del archivo con sufijo
         auto getSuffixLogFileName = [&](const std::string &base, const std::string &suffix) -> std::string
         {
             size_t pos = base.find_last_of('.');
@@ -799,7 +893,6 @@ public:
             }
         };
 
-        // Open additional log files
         instance().infoFile.open(getSuffixLogFileName(filename, "info"), std::ios::out | std::ios::trunc);
         if (!instance().infoFile.is_open())
             std::cerr << "[Logger] ERROR: Could not open info log file." << std::endl;
@@ -808,11 +901,16 @@ public:
         if (!instance().debugFile.is_open())
             std::cerr << "[Logger] ERROR: Could not open debug log file." << std::endl;
 
+        instance().warningFile.open(getSuffixLogFileName(filename, "warning"), std::ios::out | std::ios::trunc);
+        if (!instance().warningFile.is_open())
+            std::cerr << "[Logger] ERROR: Could not open warning log file." << std::endl;
+
         instance().errorFile.open(getSuffixLogFileName(filename, "error"), std::ios::out | std::ios::trunc);
         if (!instance().errorFile.is_open())
             std::cerr << "[Logger] ERROR: Could not open error log file." << std::endl;
     }
 
+    // Funciones básicas de log
     static void Debug(const std::string &msg)
     {
         instance().log(LogLevel::DEBUG, msg);
@@ -833,13 +931,106 @@ public:
         instance().log(LogLevel::ERROR, msg);
     }
 
+    // NUEVAS FUNCIONES DE LOGGING CON THROTTLING Y THRESHOLD
+
+    /**
+     * @brief Emite un log de forma "throttled" (limitado en frecuencia) identificado por 'key'.
+     * Solo se escribe el mensaje si ha transcurrido al menos throttleIntervalSeconds desde el último log con esa key.
+     */
+    static void ThrottledLog(const std::string &key, LogLevel level, const std::string &msg, double throttleIntervalSeconds = 0.5)
+    {
+        // Si la limitación está desactivada, logueamos inmediatamente.
+        if (!instance().limitLog)
+        {
+            instance().log(level, msg);
+            return;
+        }
+        auto now = std::chrono::steady_clock::now();
+        std::lock_guard<std::recursive_mutex> lock(instance().mutex_);
+        auto it = instance().throttledLogTimes.find(key);
+        if (it != instance().throttledLogTimes.end())
+        {
+            double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - it->second).count() / 1000.0;
+            if (elapsed < throttleIntervalSeconds)
+            {
+                return; // No se emite el log si no se cumple el intervalo
+            }
+        }
+        // Se actualiza el tiempo del último log y se emite el mensaje
+        instance().throttledLogTimes[key] = now;
+        instance().log(level, msg);
+    }
+
+    /**
+     * @brief Emite un log si el valor actual cambia más que 'threshold' respecto al último valor registrado con 'key'.
+     * Además, se aplica throttling para limitar la frecuencia.
+     *
+     * @tparam T Tipo numérico (int, float, etc.)
+     * @param key Identificador único para el valor a comparar.
+     * @param currentValue Valor actual.
+     * @param threshold Diferencia mínima para considerar que el cambio es significativo.
+     * @param level Nivel del log.
+     * @param msg Mensaje a registrar.
+     * @param throttleIntervalSeconds Intervalo mínimo de tiempo entre logs para la misma key.
+     */
+    template <typename T>
+    static void ThresholdLog(const std::string &key, T currentValue, T threshold, LogLevel level, const std::string &msg, double throttleIntervalSeconds = 0.5)
+    {
+        // Si la limitación está desactivada, logueamos inmediatamente.
+        if (!instance().limitLog)
+        {
+            instance().log(level, msg);
+            return;
+        }
+        auto now = std::chrono::steady_clock::now();
+        std::lock_guard<std::recursive_mutex> lock(instance().mutex_);
+        bool shouldLog = false;
+        auto it = instance().thresholdLogValues.find(key);
+        if (it != instance().thresholdLogValues.end())
+        {
+            if (std::abs(currentValue - it->second) > threshold)
+            {
+                shouldLog = true;
+            }
+        }
+        else
+        {
+            shouldLog = true;
+        }
+        // Se comprueba también el throttling
+        auto itTime = instance().throttledLogTimes.find(key);
+        if (itTime != instance().throttledLogTimes.end())
+        {
+            double elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(now - itTime->second).count() / 1000.0;
+            if (elapsed < throttleIntervalSeconds)
+            {
+                shouldLog = false;
+            }
+        }
+        if (shouldLog)
+        {
+            instance().thresholdLogValues[key] = static_cast<double>(currentValue);
+            instance().throttledLogTimes[key] = now;
+            instance().log(level, msg);
+        }
+    }
+
 private:
     LogLevel minLevel = LogLevel::DEBUG;
     std::ofstream logFile;
     std::ofstream infoFile;
     std::ofstream debugFile;
+    std::ofstream warningFile;
     std::ofstream errorFile;
-    std::mutex mutex_;
+    std::recursive_mutex mutex_;
+
+    // Mapas para guardar la última vez que se emitió un log (para throttling)
+    // y el último valor registrado (para threshold)
+    std::unordered_map<std::string, std::chrono::steady_clock::time_point> throttledLogTimes;
+    std::unordered_map<std::string, double> thresholdLogValues;
+
+    // Si limitLog es true, se aplica la limitación de logs (throttling/threshold); de lo contrario, se loguea sin limitar.
+    bool limitLog = true;
 
     Logger() {}
 
@@ -854,7 +1045,7 @@ private:
         if (level < minLevel)
             return;
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        std::lock_guard<std::recursive_mutex> lock(mutex_);
         std::string levelStr;
         switch (level)
         {
@@ -876,20 +1067,20 @@ private:
         oss << "[" << levelStr << "] " << msg << "\n";
         std::string finalMsg = oss.str();
 
-        // Write to console
+        // Escribir en consola
         if (level == LogLevel::ERROR)
             std::cerr << finalMsg;
         else
             std::cout << finalMsg;
 
-        // Write to main log file
+        // Escribir en archivo principal
         if (logFile.is_open())
         {
             logFile << finalMsg;
             logFile.flush();
         }
 
-        // Write to specific log files based on level
+        // Escribir en archivos específicos según nivel
         if (level == LogLevel::INFO && infoFile.is_open())
         {
             infoFile << finalMsg;
@@ -899,6 +1090,11 @@ private:
         {
             debugFile << finalMsg;
             debugFile.flush();
+        }
+        if (level == LogLevel::WARNING && warningFile.is_open())
+        {
+            warningFile << finalMsg;
+            warningFile.flush();
         }
         if (level == LogLevel::ERROR && errorFile.is_open())
         {
@@ -911,11 +1107,6 @@ private:
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Material.h
 ------------------------------------------------------------
-/**
- * @file Material.h
- * @brief Defines the Material structure that stores textures and material factors for PBR shading.
- */
-
 #pragma once
 #include <memory>
 #include "Texture2D.h"
@@ -923,20 +1114,26 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Material.h
 
 struct Material
 {
-    // Textures used by the material
+    // Texturas utilizadas en el material
     std::shared_ptr<Texture2D> albedo;
     std::shared_ptr<Texture2D> metallicRoughness;
     std::shared_ptr<Texture2D> normal;
     std::shared_ptr<Texture2D> occlusion;
     std::shared_ptr<Texture2D> emissive;
 
-    // Material factors used for PBR shading
-    glm::vec4 baseColorFactor = glm::vec4(1.0f); // RGBA; default is white
-    float metallicFactor = 1.0f;                 // Default metallic factor
-    float roughnessFactor = 1.0f;                // Default roughness factor
-    glm::vec3 emissiveFactor = glm::vec3(0.0f);  // Default emissive factor (no emission)
+    // Factores base para PBR
+    glm::vec4 baseColorFactor = glm::vec4(1.0f);
+    float metallicFactor = 1.0f;
+    float roughnessFactor = 1.0f;
+    glm::vec3 emissiveFactor = glm::vec3(0.0f);
 
-    Material() = default;
+    // Nuevas propiedades para clearcoat (KHR_materials_clearcoat)
+    float clearcoatFactor = 0.0f;           // Por defecto 0: sin clearcoat.
+    float clearcoatRoughnessFactor = 0.0f;    // Por defecto 0: idealmente suave.
+
+    // Propiedades para transmission (KHR_materials_transmission)
+    float transmissionFactor = 0.0f;          // Por defecto 0: no transmite luz.
+    float ior = 1.45f;                        // Índice de refracción (valor típico para vidrio)
 };
 
 ------------------------------------------------------------
@@ -1229,42 +1426,101 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Submesh.h
 #include "ModelLoader.h"
 #include "Material.h"
 #include "Logger.h"
+#include "GLDebug.h"   // Para GLCall, etc.
 #include <cstddef>
 
 struct Submesh {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
     unsigned int VAO = 0;
+    unsigned int VBO = 0;
+    unsigned int EBO = 0;
     Material material;
+
+    // Constructor por defecto
+    Submesh() = default;
+
+    // Deshabilitar copia para evitar duplicar recursos
+    Submesh(const Submesh&) = delete;
+    Submesh& operator=(const Submesh&) = delete;
+
+    // Implementar constructor de movimiento
+    Submesh(Submesh&& other) noexcept {
+        vertices = std::move(other.vertices);
+        indices = std::move(other.indices);
+        VAO = other.VAO;
+        VBO = other.VBO;
+        EBO = other.EBO;
+        material = std::move(other.material);
+        other.VAO = 0;
+        other.VBO = 0;
+        other.EBO = 0;
+    }
+
+    // Implementar asignación por movimiento
+    Submesh& operator=(Submesh&& other) noexcept {
+        if (this != &other) {
+            // Liberar recursos propios
+            if(VAO != 0) GLCall(glDeleteVertexArrays(1, &VAO));
+            if(VBO != 0) GLCall(glDeleteBuffers(1, &VBO));
+            if(EBO != 0) GLCall(glDeleteBuffers(1, &EBO));
+
+            vertices = std::move(other.vertices);
+            indices = std::move(other.indices);
+            VAO = other.VAO;
+            VBO = other.VBO;
+            EBO = other.EBO;
+            material = std::move(other.material);
+
+            other.VAO = 0;
+            other.VBO = 0;
+            other.EBO = 0;
+        }
+        return *this;
+    }
+
+    // Destructor para liberar recursos OpenGL
+    ~Submesh(){
+        if(VAO != 0) {
+            GLCall(glDeleteVertexArrays(1, &VAO));
+        }
+        if(VBO != 0) {
+            GLCall(glDeleteBuffers(1, &VBO));
+        }
+        if(EBO != 0) {
+            GLCall(glDeleteBuffers(1, &EBO));
+        }
+    }
     
     void setupMesh() {
         if (vertices.empty() || indices.empty()) {
             Logger::Warning("[Submesh] No vertices or indices to setup");
             return;
         }
-        unsigned int VBO, EBO;
-        glGenVertexArrays(1, &VAO);
-        glGenBuffers(1, &VBO);
-        glGenBuffers(1, &EBO);
         
-        glBindVertexArray(VAO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
-        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+        GLCall(glGenVertexArrays(1, &VAO));
+        GLCall(glGenBuffers(1, &VBO));
+        GLCall(glGenBuffers(1, &EBO));
         
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
-        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+        GLCall(glBindVertexArray(VAO));
         
-        // Vertex Attributes
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0);
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal));
-        glEnableVertexAttribArray(1);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords));
-        glEnableVertexAttribArray(2);
-        glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent));
-        glEnableVertexAttribArray(3);
+        GLCall(glBindBuffer(GL_ARRAY_BUFFER, VBO));
+        GLCall(glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW));
         
-        glBindVertexArray(0);
+        GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
+        GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW));
+        
+        // Configuración de los atributos de vértice:
+        GLCall(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0));
+        GLCall(glEnableVertexAttribArray(0));
+        GLCall(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal)));
+        GLCall(glEnableVertexAttribArray(1));
+        GLCall(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords)));
+        GLCall(glEnableVertexAttribArray(2));
+        GLCall(glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent)));
+        GLCall(glEnableVertexAttribArray(3));
+        
+        GLCall(glBindVertexArray(0));
         Logger::Info("[Submesh] Setup complete (" + std::to_string(vertices.size()) + " vertices, " +
                      std::to_string(indices.size()) + " indices)");
     }
@@ -1275,23 +1531,23 @@ struct Submesh {
             return;
         }
         
-        // Bind textures if present
+        // Vincular texturas si están presentes
         if (material.albedo) {
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, material.albedo->ID);
+            GLCall(glActiveTexture(GL_TEXTURE0));
+            GLCall(glBindTexture(GL_TEXTURE_2D, material.albedo->ID));
         }
         if (material.metallicRoughness) {
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID);
+            GLCall(glActiveTexture(GL_TEXTURE1));
+            GLCall(glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID));
         }
         if (material.normal) {
-            glActiveTexture(GL_TEXTURE2);
-            glBindTexture(GL_TEXTURE_2D, material.normal->ID);
+            GLCall(glActiveTexture(GL_TEXTURE2));
+            GLCall(glBindTexture(GL_TEXTURE_2D, material.normal->ID));
         }
         
-        glBindVertexArray(VAO);
-        glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, nullptr);
-        glBindVertexArray(0);
+        GLCall(glBindVertexArray(VAO));
+        GLCall(glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, nullptr));
+        GLCall(glBindVertexArray(0));
     }
 };
 
@@ -1380,39 +1636,42 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Texture2D.h
 #include <glad/glad.h>
 #include <string>
 #include "stb_image.h"
-#include "FileUtils.h"  // Se espera que aquí se defina la estructura ImageData
+#include "FileUtils.h" // Define ImageData.
 #include "Logger.h"
+#include "GLDebug.h" // Para usar GLCall, etc.
 
-class Texture2D {
+class Texture2D
+{
 public:
     unsigned int ID = 0;
     int Width = 0, Height = 0;
-    GLenum Internal_Format = GL_RGB;  // Formato interno de la textura
-    GLenum Image_Format = GL_RGB;     // Formato de la imagen cargada
-    GLenum Wrap_S = GL_REPEAT, Wrap_T = GL_REPEAT; // Wrapping
+    GLenum Internal_Format = GL_RGB;                                     // Formato interno
+    GLenum Image_Format = GL_RGB;                                        // Formato de la imagen cargada
+    GLenum Wrap_S = GL_REPEAT, Wrap_T = GL_REPEAT;                       // Wrapping
     GLenum Filter_Min = GL_LINEAR_MIPMAP_LINEAR, Filter_Mag = GL_LINEAR; // Filtros
 
-    // Constructor: genera la textura en OpenGL y registra el ID
-    Texture2D() {
-        glGenTextures(1, &ID);
+    // Constructor: genera la textura en OpenGL y registra el ID.
+    Texture2D()
+    {
+        GLCall(glGenTextures(1, &ID));
         Logger::Debug("[Texture2D] Generated ID: " + std::to_string(ID));
     }
-    
-    // Se desaconseja el uso de carga síncrona mediante Generate; se usa GenerateFromData.
-    void Generate(const char* file, bool alpha) {
+
+    // Método no recomendado: carga síncrona de textura.
+    void Generate(const char *file, bool alpha)
+    {
         Logger::Warning("[Texture2D] Use GenerateFromData instead");
     }
-    
+
     /**
      * @brief Genera la textura a partir de los datos de imagen proporcionados.
      * @param img Datos de la imagen (ancho, alto, canales y puntero a los datos).
-     * @param alpha Si es true, se espera que la imagen tenga canal alfa.
-     *
-     * Se configuran los formatos internos y externos según si la textura tiene alfa,
-     * se generan mipmaps y se establecen los parámetros de wrapping y filtrado.
+     * @param alpha Indica si se espera que la imagen tenga canal alfa.
      */
-    void GenerateFromData(const FileUtils::ImageData& img, bool alpha) {
-        if (!img.data) {
+    void GenerateFromData(const FileUtils::ImageData &img, bool alpha)
+    {
+        if (!img.data)
+        {
             Logger::Error("[Texture2D] Image data is null");
             return;
         }
@@ -1420,28 +1679,31 @@ public:
         Height = img.height;
         int desired_channels = alpha ? 4 : 3;
         GLenum format = (desired_channels == 4) ? GL_RGBA : GL_RGB;
-        
-        // Configura formatos y wrapping según si se usa alfa.
-        if (alpha) {
+
+        // Configuración de formatos y parámetros según si se usa alfa.
+        if (alpha)
+        {
             Internal_Format = GL_SRGB_ALPHA;
             Image_Format = GL_RGBA;
             Wrap_S = GL_CLAMP_TO_EDGE;
             Wrap_T = GL_CLAMP_TO_EDGE;
-        } else {
+        }
+        else
+        {
             Internal_Format = GL_RGB;
             Image_Format = GL_RGB;
         }
-        
-        glBindTexture(GL_TEXTURE_2D, ID);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glTexImage2D(GL_TEXTURE_2D, 0, Internal_Format, Width, Height, 0, format, GL_UNSIGNED_BYTE, img.data);
-        glGenerateMipmap(GL_TEXTURE_2D);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, Wrap_S);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, Wrap_T);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, Filter_Min);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, Filter_Mag);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        
+
+        GLCall(glBindTexture(GL_TEXTURE_2D, ID));
+        GLCall(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
+        GLCall(glTexImage2D(GL_TEXTURE_2D, 0, Internal_Format, Width, Height, 0, format, GL_UNSIGNED_BYTE, img.data));
+        GLCall(glGenerateMipmap(GL_TEXTURE_2D));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, Wrap_S));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, Wrap_T));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, Filter_Min));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, Filter_Mag));
+        GLCall(glBindTexture(GL_TEXTURE_2D, 0));
+
         Logger::Info("[Texture2D] Texture generated (ID: " + std::to_string(ID) + ")");
         stbi_image_free(img.data);
     }
@@ -1499,7 +1761,8 @@ public:
     
     UniformBuffer() {
         glGenBuffers(1, &ID);
-        Logger::Debug("[UniformBuffer] Generated ID: " + std::to_string(ID));
+        Logger::ThrottledLog("UniformBuffer_Generated", LogLevel::DEBUG, 
+                             "[UniformBuffer] Generated ID: " + std::to_string(ID), 0.5);
     }
     
     void Bind() {
@@ -1519,7 +1782,8 @@ public:
     
     void BindToPoint(GLuint bindingPoint) {
         glBindBufferBase(GL_UNIFORM_BUFFER, bindingPoint, ID);
-        Logger::Debug("[UniformBuffer] Bound to point " + std::to_string(bindingPoint));
+        Logger::ThrottledLog("UniformBuffer_BindToPoint", LogLevel::DEBUG, 
+                             "[UniformBuffer] Bound to point " + std::to_string(bindingPoint), 0.5);
     }
 };
 
@@ -1536,6 +1800,11 @@ Config Config::LoadFromFile(const std::string& configFilePath) {
         YAML::Node root = YAML::LoadFile(configFilePath);
         if (root["projectRoot"])
             config.projectRoot = root["projectRoot"].as<std::string>();
+        if (root["limitLog"]) {
+            config.limitLog = root["limitLog"].as<std::string>();
+            // Configuramos el Logger según el valor (yes -> true, no -> false)
+            Logger::SetLimitLog(config.limitLog == "yes");
+        }
         if (root["assets"])
             config.assets = root["assets"].as<std::string>();
         if (root["shaders"])
@@ -1688,9 +1957,16 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
  * configures lights from the configuration, and runs the render loop.
  */
 
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#endif
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
+#include <sstream>
+#include <cassert>
 #include "ResourceManager.h"
 #include "Config.h"
 #include "Logger.h"
@@ -1706,158 +1982,223 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include "Light.h"
 #include "LightManager.h"
 #include "ECSPlayerController.h"
+#include "GLDebug.h" // Para GLCall() y SetupOpenGLDebugCallback()
 
 float deltaTime = 0.0f, lastFrame = 0.0f;
 Camera camera;
 
+// Callback para errores de GLFW.
+void glfwErrorCallback(int error, const char *description)
+{
+    Logger::Error("[GLFW] Error (" + std::to_string(error) + "): " + std::string(description));
+}
+
+// Callback para redimensionar el framebuffer.
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
-    glViewport(0, 0, width, height);
-    Logger::Debug("Framebuffer resized: width = " + std::to_string(width) +
-                  ", height = " + std::to_string(height));
+    GLCall(glViewport(0, 0, width, height));
+    Logger::ThrottledLog("Main_FramebufferResize", LogLevel::DEBUG,
+                         "Framebuffer resized: width = " + std::to_string(width) +
+                             ", height = " + std::to_string(height),
+                         0.5);
 }
 
 int main()
 {
-    Logger::SetLogFile("Toxic.log");
-    Logger::SetLogLevel(LogLevel::DEBUG);
-    Logger::Info("Main: Starting application.");
-
-    // Cargar configuración desde config.yaml usando una ruta relativa.
-    std::string configPath = "./config/config.yaml";
-    Config config = Config::LoadFromFile(configPath);
-
-    // Inyectar la configuración en ResourceManager.
-    ResourceManager::SetConfig(config);
-
-    if (!glfwInit())
+    try
     {
-        Logger::Error("Main: Failed to initialize GLFW.");
-        return -1;
+        glfwSetErrorCallback(glfwErrorCallback);
+        Logger::SetLogFile("Toxic.log");
+        Logger::SetLogLevel(LogLevel::DEBUG);
+        Logger::Info("Main: Starting application.");
+
+        // Cargar configuración desde config.yaml (ruta relativa).
+        std::string configPath = "./config/config.yaml";
+        Config config = Config::LoadFromFile(configPath);
+
+        // Inyectar la configuración en ResourceManager.
+        ResourceManager::SetConfig(config);
+
+        if (!glfwInit())
+        {
+            Logger::Error("Main: Failed to initialize GLFW.");
+#ifdef _DEBUG
+            _CrtDumpMemoryLeaks();
+#endif
+            return -1;
+        }
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+        glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+        glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+
+        GLFWwindow *window = glfwCreateWindow(1920, 1080, "Toxic - 3D", nullptr, nullptr);
+        if (!window)
+        {
+            Logger::Error("Main: Failed to create GLFW window.");
+            glfwTerminate();
+#ifdef _DEBUG
+            _CrtDumpMemoryLeaks();
+#endif
+            return -1;
+        }
+        glfwMakeContextCurrent(window);
+        glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+        if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+        {
+            Logger::Error("Main: Failed to initialize GLAD.");
+#ifdef _DEBUG
+            _CrtDumpMemoryLeaks();
+#endif
+            return -1;
+        }
+
+        // Configurar callback de depuración de OpenGL.
+        SetupOpenGLDebugCallback();
+
+        GLCall(glEnable(GL_DEPTH_TEST));
+        GLCall(glEnable(GL_FRAMEBUFFER_SRGB));
+        GLCall(glEnable(GL_BLEND));
+        GLCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
+
+        // Inicializar ECS coordinator.
+        Coordinator coordinator;
+        coordinator.Init();
+        coordinator.RegisterComponent<TransformComponent>();
+        coordinator.RegisterComponent<RenderComponent>();
+
+        auto renderSystem = coordinator.RegisterSystem<RenderSystem>();
+        ECS::Signature renderSignature;
+        renderSignature.set(coordinator.GetComponentType<TransformComponent>());
+        renderSignature.set(coordinator.GetComponentType<RenderComponent>());
+        coordinator.SetSystemSignature<RenderSystem>(renderSignature);
+
+        // Cargar entidades desde entities.yaml (ruta relativa).
+        std::string entityConfigPath = "./config/entities.yaml";
+        EntityLoader::LoadEntitiesFromYAML(&coordinator, entityConfigPath);
+
+        // Asumir que la primera entidad (ID 0) es el vehículo del jugador.
+        ECS::Entity playerEntity = 0;
+        ECSPlayerController playerController(&coordinator, playerEntity);
+
+        // Cargar el shader global:
+        // Vertex shader se toma de config.vertexShader y fragment shader de config.defaultShader.
+        std::string vertexShaderPath = config.vertexShader;
+        std::string fragmentShaderPath = config.defaultShader;
+        auto defaultShader = ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "defaultShader");
+        defaultShader->Use();
+        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "albedoMap"), 0));
+        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "metallicRoughnessMap"), 1));
+        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "normalMap"), 2));
+        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "useMaps"), 1));
+        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f / 1080.0f, 0.1f, 100.0f);
+        GLCall(glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection)));
+        Logger::Info("Main: Default shaders loaded successfully.");
+
+        renderSystem->Init(&coordinator, defaultShader.get(), &camera);
+
+        // Configurar las luces usando la información de config.yaml.
+        LightManager lightManager;
+        for (const auto &lc : config.lights)
+        {
+            Light light{};
+            if (lc.type == "point")
+                light.typeAndPadding = glm::vec4(0, 0, 0, 0);
+            light.position = glm::vec4(lc.position, 1.0f);
+            light.colorAndIntensity = glm::vec4(lc.color, 1.0f);
+            lightManager.AddLight(light);
+        }
+
+        unsigned int lightBlockIndex = glGetUniformBlockIndex(defaultShader->ID, "LightBlock");
+        if (lightBlockIndex == GL_INVALID_INDEX)
+        {
+            Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
+        }
+        else
+        {
+            GLCall(glUniformBlockBinding(defaultShader->ID, lightBlockIndex, 1));
+            Logger::Info("Main: LightBlock bound to binding point 1.");
+        }
+
+        Logger::Info("Main: Entering main loop.");
+        // Bucle principal de renderizado.
+        while (!glfwWindowShouldClose(window))
+        {
+            float currentFrame = static_cast<float>(glfwGetTime());
+            deltaTime = currentFrame - lastFrame;
+            lastFrame = currentFrame;
+
+            glfwPollEvents();
+            if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+                glfwSetWindowShouldClose(window, true);
+
+            playerController.Update(deltaTime);
+
+            // Configurar la cámara fija para observar el modelo.
+            camera.Position = glm::vec3(0.0f, 10.0f, 20.0f);
+            camera.Front = glm::normalize(glm::vec3(0.0f) - camera.Position);
+            camera.Up = glm::vec3(0, 1, 0);
+
+            GLCall(glClearColor(0.1f, 0.1f, 0.1f, 1.0f));
+            GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
+
+            defaultShader->Use();
+            glm::mat4 view = camera.GetViewMatrix();
+            GLCall(glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view)));
+            GLCall(glUniform3fv(glGetUniformLocation(defaultShader->ID, "camPos"), 1, glm::value_ptr(camera.Position)));
+
+            lightManager.UpdateUBO();
+            lightManager.lightUBO.BindToPoint(1);
+            GLCall(glUniform3fv(glGetUniformLocation(defaultShader->ID, "ambientColor"), 1, glm::value_ptr(config.ambientColor)));
+
+            renderSystem->Update(deltaTime);
+
+            // Logging extendido: verificar el estado del framebuffer.
+            GLenum fbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            if (fbStatus != GL_FRAMEBUFFER_COMPLETE)
+            {
+                Logger::ThrottledLog("Main_FramebufferIncomplete", LogLevel::WARNING,
+                                     "[Main] Framebuffer incomplete: " + std::to_string(fbStatus), 0.5);
+            }
+            else
+            {
+                Logger::ThrottledLog("Main_FramebufferComplete", LogLevel::DEBUG,
+                                     "[Main] Framebuffer complete.", 0.5);
+            }
+
+            glfwSwapBuffers(window);
+        }
+
+        Logger::Info("Main: Exiting main loop. Cleaning up resources.");
+        ResourceManager::Clear();
+        glfwTerminate();
+#ifdef _DEBUG
+        _CrtDumpMemoryLeaks();
+#endif
+        return 0;
     }
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
-    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
-    GLFWwindow *window = glfwCreateWindow(1920, 1080, "Toxic - 3D", nullptr, nullptr);
-    if (!window)
+    catch (const std::exception &e)
     {
-        Logger::Error("Main: Failed to create GLFW window.");
+        Logger::Error(std::string("[Main] Exception caught in main loop: ") + e.what());
+        std::cerr << "Ocurrió un error inesperado. Por favor, revisa el log para más detalles." << std::endl;
+#ifdef _DEBUG
+        _CrtDumpMemoryLeaks();
+#endif
         glfwTerminate();
         return -1;
     }
-    glfwMakeContextCurrent(window);
-    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-
-    if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
+    catch (...)
     {
-        Logger::Error("Main: Failed to initialize GLAD.");
+        Logger::Error("[Main] Unknown exception caught in main loop.");
+        std::cerr << "Ocurrió un error desconocido. Por favor, revisa el log." << std::endl;
+#ifdef _DEBUG
+        _CrtDumpMemoryLeaks();
+#endif
+        glfwTerminate();
         return -1;
     }
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_FRAMEBUFFER_SRGB);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // Inicializar ECS coordinator
-    Coordinator coordinator;
-    coordinator.Init();
-    coordinator.RegisterComponent<TransformComponent>();
-    coordinator.RegisterComponent<RenderComponent>();
-
-    auto renderSystem = coordinator.RegisterSystem<RenderSystem>();
-    ECS::Signature renderSignature;
-    renderSignature.set(coordinator.GetComponentType<TransformComponent>());
-    renderSignature.set(coordinator.GetComponentType<RenderComponent>());
-    coordinator.SetSystemSignature<RenderSystem>(renderSignature);
-
-    // Cargar entidades desde entities.yaml (ruta relativa)
-    std::string entityConfigPath = "./config/entities.yaml";
-    EntityLoader::LoadEntitiesFromYAML(&coordinator, entityConfigPath);
-
-    // Asumir que la primera entidad (ID 0) es el vehículo del jugador.
-    ECS::Entity playerEntity = 0;
-    ECSPlayerController playerController(&coordinator, playerEntity);
-
-    // Cargar el shader global:
-    // Vertex shader global se toma de config.vertexShader y el fragment shader global es el defaultShader.
-    std::string vertexShaderPath = config.vertexShader;
-    std::string fragmentShaderPath = config.defaultShader;
-    auto defaultShader = ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "defaultShader");
-    defaultShader->Use();
-    glUniform1i(glGetUniformLocation(defaultShader->ID, "albedoMap"), 0);
-    glUniform1i(glGetUniformLocation(defaultShader->ID, "metallicRoughnessMap"), 1);
-    glUniform1i(glGetUniformLocation(defaultShader->ID, "normalMap"), 2);
-    glUniform1i(glGetUniformLocation(defaultShader->ID, "useMaps"), 1);
-    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f / 1080.0f, 0.1f, 100.0f);
-    glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-    Logger::Info("Main: Default shaders loaded successfully.");
-
-    renderSystem->Init(&coordinator, defaultShader.get(), &camera);
-
-    // Configurar las luces usando la información de config.yaml
-    LightManager lightManager;
-    for (const auto &lc : config.lights)
-    {
-        Light light{};
-        if (lc.type == "point")
-            light.typeAndPadding = glm::vec4(0, 0, 0, 0);
-        light.position = glm::vec4(lc.position, 1.0f);
-        light.colorAndIntensity = glm::vec4(lc.color, 1.0f);
-        lightManager.AddLight(light);
-    }
-
-    unsigned int lightBlockIndex = glGetUniformBlockIndex(defaultShader->ID, "LightBlock");
-    if (lightBlockIndex == GL_INVALID_INDEX)
-    {
-        Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
-    }
-    else
-    {
-        glUniformBlockBinding(defaultShader->ID, lightBlockIndex, 1);
-        Logger::Info("Main: LightBlock bound to binding point 1.");
-    }
-
-    Logger::Info("Main: Entering main loop.");
-    while (!glfwWindowShouldClose(window))
-    {
-        float currentFrame = static_cast<float>(glfwGetTime());
-        deltaTime = currentFrame - lastFrame;
-        lastFrame = currentFrame;
-
-        glfwPollEvents();
-        if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-            glfwSetWindowShouldClose(window, true);
-
-        playerController.Update(deltaTime);
-
-        // Configurar la cámara fija para observar el modelo
-        camera.Position = glm::vec3(0.0f, 10.0f, 20.0f);
-        camera.Front = glm::normalize(glm::vec3(0.0f) - camera.Position);
-        camera.Up = glm::vec3(0, 1, 0);
-
-        glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-        defaultShader->Use();
-        glm::mat4 view = camera.GetViewMatrix();
-        glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glUniform3fv(glGetUniformLocation(defaultShader->ID, "camPos"), 1, glm::value_ptr(camera.Position));
-
-        lightManager.UpdateUBO();
-        lightManager.lightUBO.BindToPoint(1);
-        glUniform3fv(glGetUniformLocation(defaultShader->ID, "ambientColor"), 1, glm::value_ptr(config.ambientColor));
-
-        renderSystem->Update(deltaTime);
-
-        glfwSwapBuffers(window);
-    }
-
-    Logger::Info("Main: Exiting main loop. Cleaning up resources.");
-    ResourceManager::Clear();
-    glfwTerminate();
-    return 0;
 }
 
 ------------------------------------------------------------
@@ -1959,7 +2300,7 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
         }
         
         submesh.setupMesh();
-        submeshes.push_back(submesh);
+        submeshes.push_back(std::move(submesh));
     }
     
     for (unsigned int i = 0; i < node->mNumChildren; i++) {
@@ -2009,31 +2350,6 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ModelLoader.cpp
 #include <algorithm>
 #include <string>
 #include "Logger.h"
-
-// Converts an Assimp aiMatrix4x4 to a glm::mat4.
-glm::mat4 aiMatrix4x4ToGlm(const aiMatrix4x4 &from)
-{
-    Logger::Debug("[ModelLoader] Converting aiMatrix4x4 to glm::mat4.");
-    glm::mat4 to;
-    to[0][0] = from.a1;
-    to[1][0] = from.a2;
-    to[2][0] = from.a3;
-    to[3][0] = from.a4;
-    to[0][1] = from.b1;
-    to[1][1] = from.b2;
-    to[2][1] = from.b3;
-    to[3][1] = from.b4;
-    to[0][2] = from.c1;
-    to[1][2] = from.c2;
-    to[2][2] = from.c3;
-    to[3][2] = from.c4;
-    to[0][3] = from.d1;
-    to[1][3] = from.d2;
-    to[2][3] = from.d3;
-    to[3][3] = from.d4;
-    Logger::Debug("[ModelLoader] Conversion complete.");
-    return to;
-}
 
 void processNode(aiNode *node, const aiScene *scene,
                  std::vector<Vertex> &vertices,
@@ -2129,98 +2445,171 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ResourceManager.cpp
 #include "FileUtils.h"
 #include "Logger.h"
 #include <filesystem>
+#include "GLDebug.h"
+#include <cassert>
 
 Config ResourceManager::m_Config;
 std::map<std::string, std::shared_ptr<Shader>> ResourceManager::Shaders;
 std::map<std::string, std::shared_ptr<Texture2D>> ResourceManager::Textures;
 std::map<std::string, std::shared_ptr<Model>> ResourceManager::Models;
 
-std::shared_ptr<Shader> ResourceManager::LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name) {
-    std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
-    std::filesystem::path vp(vertexPath);
-    if (!vp.is_absolute()) {
-        vertexPath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexPath);
-    }
-    std::string fragmentPath = FileUtils::NormalizePath(fShaderFile);
-    std::filesystem::path fp(fragmentPath);
-    if (!fp.is_absolute()) {
-        fragmentPath = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.shaders, fragmentPath);
-    }
-    
-    auto shader = std::make_shared<Shader>();
-    shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
-    Shaders[name] = shader;
-    Logger::Info("[ResourceManager] Shader loaded: " + name + " (ID: " + std::to_string(shader->ID) + ")");
-    return shader;
-}
-
-std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::string& fragmentShaderName, const std::string& key) {
-    // Utiliza los nombres tal como están definidos en config.yaml (incluyendo extensión)
-    std::string vertexShaderFile = m_Config.vertexShader;      // Ej: "pbr_vertex.glsl"
-    std::string fragmentShaderFile = fragmentShaderName;         // Ej: "pbr_fragment.glsl"
-    
-    // Resolver rutas usando la configuración global.
-    vertexShaderFile = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.shaders, vertexShaderFile);
-    fragmentShaderFile = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.shaders, fragmentShaderFile);
-    
-    return LoadShader(vertexShaderFile.c_str(), fragmentShaderFile.c_str(), key);
-}
-
-std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char* file, bool alpha, std::string name) {
-    std::string filePath = FileUtils::NormalizePath(file);
-    std::filesystem::path p(filePath);
-    if (!p.is_absolute()) {
-        // Si la ruta ya comienza con "assets" o "./assets", no se añade de nuevo.
-        std::string normalizedFilePath = filePath;
-        std::string prefix1 = m_Config.assets;           // por ejemplo "assets"
-        std::string prefix2 = "./" + m_Config.assets;       // por ejemplo "./assets"
-        if (normalizedFilePath.find(prefix1) == 0 || normalizedFilePath.find(prefix2) == 0) {
-            // Si projectRoot no es "./", se resuelve usando projectRoot solamente.
-            if(m_Config.projectRoot != "./") {
-                filePath = FileUtils::ResolvePath(m_Config.projectRoot, normalizedFilePath);
-            }
-        } else {
-            filePath = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.assets, filePath);
+std::shared_ptr<Shader> ResourceManager::LoadShader(const char *vShaderFile, const char *fShaderFile, std::string name)
+{
+    try
+    {
+        std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
+        std::filesystem::path vp(vertexPath);
+        if (!vp.is_absolute())
+        {
+            vertexPath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexPath);
         }
+        std::string fragmentPath = FileUtils::NormalizePath(fShaderFile);
+        std::filesystem::path fp(fragmentPath);
+        if (!fp.is_absolute())
+        {
+            fragmentPath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, fragmentPath);
+        }
+
+        auto shader = std::make_shared<Shader>();
+        shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
+        Shaders[name] = shader;
+        Logger::Info("[ResourceManager] Shader loaded: " + name + " (ID: " + std::to_string(shader->ID) + ")");
+        return shader;
     }
-    auto texture = std::make_shared<Texture2D>();
-    // Aquí se debe cargar la imagen y llamar a GenerateFromData; se omite la carga real de imagen.
-    Textures[name] = texture;
-    Logger::Info("[ResourceManager] Texture loaded: " + name + " (" + filePath + ")");
-    return texture;
+    catch (const std::exception &e)
+    {
+        Logger::Error("[ResourceManager] Exception while loading shader: " + std::string(e.what()));
+        return nullptr;
+    }
 }
 
-std::shared_ptr<Model> ResourceManager::LoadModel(const char* file, std::string name) {
-    std::string filePath = FileUtils::NormalizePath(file);
-    std::filesystem::path p(filePath);
-    if (!p.is_absolute()) {
-        filePath = FileUtils::ResolvePath(m_Config.projectRoot +  m_Config.assets, filePath);
+std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::string &fragmentShaderName, const std::string &key)
+{
+    try
+    {
+        std::string vertexShaderFile = m_Config.vertexShader; // Ejemplo: "pbr_vertex.glsl"
+        std::string fragmentShaderFile = fragmentShaderName;  // Ejemplo: "pbr_fragment.glsl"
+
+        // Resolver rutas usando la configuración global.
+        vertexShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexShaderFile);
+        fragmentShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, fragmentShaderFile);
+
+        return LoadShader(vertexShaderFile.c_str(), fragmentShaderFile.c_str(), key);
     }
-    auto model = std::make_shared<Model>(filePath);
-    Models[name] = model;
-    Logger::Info("[ResourceManager] Model loaded: " + name);
-    return model;
+    catch (const std::exception &e)
+    {
+        Logger::Error("[ResourceManager] Exception in LoadShaderWithFragment: " + std::string(e.what()));
+        return nullptr;
+    }
 }
 
-std::shared_ptr<Shader> ResourceManager::GetShader(const std::string& name) {
+std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool alpha, std::string name)
+{
+    try
+    {
+        std::string filePath = FileUtils::NormalizePath(file);
+        std::filesystem::path p(filePath);
+        if (!p.is_absolute())
+        {
+            std::string normalizedFilePath = filePath;
+            std::string prefix1 = m_Config.assets;
+            std::string prefix2 = "./" + m_Config.assets;
+            if (normalizedFilePath.find(prefix1) == 0 || normalizedFilePath.find(prefix2) == 0)
+            {
+                if (m_Config.projectRoot != "./")
+                {
+                    filePath = FileUtils::ResolvePath(m_Config.projectRoot, normalizedFilePath);
+                }
+            }
+            else
+            {
+                filePath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.assets, filePath);
+            }
+        }
+
+        Logger::Debug("[ResourceManager] Cargando imagen desde: " + filePath);
+
+        auto texture = std::make_shared<Texture2D>();
+
+        // Forzar el número de canales según 'alpha'
+        int width, height, nrChannels;
+        unsigned char *data = stbi_load(filePath.c_str(), &width, &height, &nrChannels, alpha ? 4 : 3);
+        // Assertion para asegurarse de que se cargó la imagen.
+        assert(data && "Error: Los datos de la imagen son nulos tras stbi_load.");
+        if (data)
+        {
+            Logger::Debug("[ResourceManager] Imagen cargada: " + filePath +
+                          " (" + std::to_string(width) + "x" + std::to_string(height) +
+                          ", canales: " + std::to_string(nrChannels) + ")");
+            FileUtils::ImageData imgData;
+            imgData.data = data;
+            imgData.width = width;
+            imgData.height = height;
+            imgData.channels = nrChannels;
+            texture->GenerateFromData(imgData, alpha);
+        }
+        else
+        {
+            Logger::Error("[ResourceManager] Failed to load image: " + filePath);
+            return nullptr;
+        }
+
+        Textures[name] = texture;
+        Logger::Info("[ResourceManager] Texture loaded: " + name + " (" + filePath + ")");
+        return texture;
+    }
+    catch (const std::exception &e)
+    {
+        Logger::Error("[ResourceManager] Exception while loading texture: " + std::string(e.what()));
+        return nullptr;
+    }
+}
+
+std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string name)
+{
+    try
+    {
+        std::string filePath = FileUtils::NormalizePath(file);
+        std::filesystem::path p(filePath);
+        if (!p.is_absolute())
+        {
+            filePath = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.assets, filePath);
+        }
+        auto model = std::make_shared<Model>(filePath);
+        Models[name] = model;
+        Logger::Info("[ResourceManager] Model loaded: " + name);
+        return model;
+    }
+    catch (const std::exception &e)
+    {
+        Logger::Error("[ResourceManager] Exception while loading model: " + std::string(e.what()));
+        return nullptr;
+    }
+}
+
+std::shared_ptr<Shader> ResourceManager::GetShader(const std::string &name)
+{
     return Shaders[name];
 }
 
-std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string& name) {
+std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string &name)
+{
     return Textures[name];
 }
 
-std::shared_ptr<Model> ResourceManager::GetModel(const std::string& name) {
+std::shared_ptr<Model> ResourceManager::GetModel(const std::string &name)
+{
     return Models[name];
 }
 
-void ResourceManager::Clear() {
+void ResourceManager::Clear()
+{
     Logger::Info("[ResourceManager] Clearing all resources.");
     for (auto &iter : Shaders)
-        glDeleteProgram(iter.second->ID);
+        GLCall(glDeleteProgram(iter.second->ID));
     Shaders.clear();
     for (auto &iter : Textures)
-        glDeleteTextures(1, &iter.second->ID);
+        GLCall(glDeleteTextures(1, &iter.second->ID));
     Textures.clear();
     Models.clear();
 }

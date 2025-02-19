@@ -8,6 +8,11 @@ Config Config::LoadFromFile(const std::string& configFilePath) {
         YAML::Node root = YAML::LoadFile(configFilePath);
         if (root["projectRoot"])
             config.projectRoot = root["projectRoot"].as<std::string>();
+        if (root["limitLog"]) {
+            config.limitLog = root["limitLog"].as<std::string>();
+            // Configuramos el Logger según el valor (yes -> true, no -> false)
+            Logger::SetLimitLog(config.limitLog == "yes");
+        }
         if (root["assets"])
             config.assets = root["assets"].as<std::string>();
         if (root["shaders"])
