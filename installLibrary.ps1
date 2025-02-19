@@ -9,7 +9,7 @@
     1. Descomprime el archivo ZIP de la librería.
     2. Si se detecta un CMakeLists.txt (en la raíz o en subdirectorios), se asume que la
        librería debe compilarse. Se crea la carpeta "build_msvc", se configura y se compila
-       la librería con CMake (usando Visual Studio 17 2022 y -DCMAKE_INSTALL_PREFIX=".\install").
+       la librería con CMake (usando Visual Studio 17 2022 y -DCMAKE_INSTALL_PREFIX=".\install").  
        Si no se encuentra un CMakeLists.txt (por ejemplo, en el caso de la librería glad),
        se omite la compilación y se copian directamente los archivos.
     3. Se determinan las carpetas de interés ("include", "lib", "bin" y "src") y se copian
@@ -127,9 +127,19 @@ if ($cmakeLists.Count -gt 0) {
         exit $LASTEXITCODE
     }
     
-    # Compilar e instalar la librería (modo Release)
-    Write-Host "Construyendo e instalando la librería (modo Release)..."
-    & cmake --build . --config Release --target INSTALL
+    # ----- MODIFICACIÓN: Preguntar al usuario la configuración de compilación -----
+    $buildChoice = Read-Host "Seleccione la configuración de compilación: (1) Release, (2) Debug (default: Release)"
+    if ($buildChoice -eq "2") {
+        $buildConfigName = "Debug"
+    }
+    else {
+        $buildConfigName = "Release"
+    }
+    Write-Host "Construyendo e instalando la librería en modo $buildConfigName..."
+    # --------------------------------------------------------------------------------
+    
+    # Compilar e instalar la librería en la configuración elegida
+    & cmake --build . --config $buildConfigName --target INSTALL
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Error durante la compilación/instalación de la librería."
         exit $LASTEXITCODE
@@ -240,6 +250,7 @@ if (Test-Path $cmakelistsPath) {
     $cmakelistsContent = Get-Content $cmakelistsPath -Raw
 
     # Actualizar el bloque target_include_directories(Toxic PRIVATE ...)
+
     $regexTargetInclude = [regex]::new('target_include_directories\s*\(\s*Toxic\s+PRIVATE\s*(?<content>.*?)\)', [System.Text.RegularExpressions.RegexOptions]::Singleline)
     $matchTargetInclude = $regexTargetInclude.Match($cmakelistsContent)
     if ($matchTargetInclude.Success) {

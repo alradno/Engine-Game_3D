@@ -33,6 +33,7 @@ target_include_directories(Toxic PRIVATE
     ${CMAKE_SOURCE_DIR}/libs/glm/include
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/libs/yaml/include
+    ${CMAKE_SOURCE_DIR}/libs/tinygltf/include
 )
 
 # Link the necessary libraries for Toxic.
@@ -42,7 +43,9 @@ target_link_libraries(Toxic PRIVATE
     gdi32
     ${CMAKE_SOURCE_DIR}/libs/glfw/lib/glfw3.lib
     ${CMAKE_SOURCE_DIR}/libs/glm/lib/glm.lib
-    ${CMAKE_SOURCE_DIR}/libs/yaml/lib/yaml-cpp.lib
+    ${CMAKE_SOURCE_DIR}/libs/tinygltf/lib/tinygltf.lib
+    $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/libs/yamldebug/lib/yaml-cppd.lib>
+    $<$<CONFIG:Release>:${CMAKE_SOURCE_DIR}/libs/yaml/lib/yaml-cpp.lib>
 )
 
 target_compile_definitions(Toxic PRIVATE YAML_CPP_STATIC_DEFINE)
@@ -56,5 +59,8 @@ if(WIN32)
         COMMENT "Copying Assimp DLL to the executable directory"
     )
 endif()
+
+
+
 
 

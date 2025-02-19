@@ -7,6 +7,11 @@
  * configures lights from the configuration, and runs the render loop.
  */
 
+#ifdef _DEBUG
+#define _CRTDBG_MAP_ALLOC
+#include <crtdbg.h>
+#endif
+
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 #include <iostream>
@@ -65,6 +70,9 @@ int main()
         if (!glfwInit())
         {
             Logger::Error("Main: Failed to initialize GLFW.");
+#ifdef _DEBUG
+            _CrtDumpMemoryLeaks();
+#endif
             return -1;
         }
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -77,6 +85,9 @@ int main()
         {
             Logger::Error("Main: Failed to create GLFW window.");
             glfwTerminate();
+#ifdef _DEBUG
+            _CrtDumpMemoryLeaks();
+#endif
             return -1;
         }
         glfwMakeContextCurrent(window);
@@ -86,6 +97,9 @@ int main()
         if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
         {
             Logger::Error("Main: Failed to initialize GLAD.");
+#ifdef _DEBUG
+            _CrtDumpMemoryLeaks();
+#endif
             return -1;
         }
 
@@ -206,12 +220,18 @@ int main()
         Logger::Info("Main: Exiting main loop. Cleaning up resources.");
         ResourceManager::Clear();
         glfwTerminate();
+#ifdef _DEBUG
+        _CrtDumpMemoryLeaks();
+#endif
         return 0;
     }
     catch (const std::exception &e)
     {
         Logger::Error(std::string("[Main] Exception caught in main loop: ") + e.what());
         std::cerr << "Ocurrió un error inesperado. Por favor, revisa el log para más detalles." << std::endl;
+#ifdef _DEBUG
+        _CrtDumpMemoryLeaks();
+#endif
         glfwTerminate();
         return -1;
     }
@@ -219,6 +239,9 @@ int main()
     {
         Logger::Error("[Main] Unknown exception caught in main loop.");
         std::cerr << "Ocurrió un error desconocido. Por favor, revisa el log." << std::endl;
+#ifdef _DEBUG
+        _CrtDumpMemoryLeaks();
+#endif
         glfwTerminate();
         return -1;
     }

@@ -7,7 +7,8 @@
         "${workspaceFolder}/libs/**",
         "${workspaceFolder}/include/**",
         "${workspaceFolder}/libs/yaml/include",
-        "${workspaceFolder}/libs/glad/include"
+        "${workspaceFolder}/libs/glad/include",
+        "${workspaceFolder}/libs/tinygltf/include"
       ],
       "defines": [
         "_DEBUG",

@@ -1,8 +1,3 @@
-/**
- * @file Material.h
- * @brief Defines the Material structure that stores textures and material factors for PBR shading.
- */
-
 #pragma once
 #include <memory>
 #include "Texture2D.h"
@@ -10,18 +5,24 @@
 
 struct Material
 {
-    // Textures used by the material
+    // Texturas utilizadas en el material
     std::shared_ptr<Texture2D> albedo;
     std::shared_ptr<Texture2D> metallicRoughness;
     std::shared_ptr<Texture2D> normal;
     std::shared_ptr<Texture2D> occlusion;
     std::shared_ptr<Texture2D> emissive;
 
-    // Material factors used for PBR shading
-    glm::vec4 baseColorFactor = glm::vec4(1.0f); // RGBA; default is white
-    float metallicFactor = 1.0f;                 // Default metallic factor
-    float roughnessFactor = 1.0f;                // Default roughness factor
-    glm::vec3 emissiveFactor = glm::vec3(0.0f);  // Default emissive factor (no emission)
+    // Factores base para PBR
+    glm::vec4 baseColorFactor = glm::vec4(1.0f);
+    float metallicFactor = 1.0f;
+    float roughnessFactor = 1.0f;
+    glm::vec3 emissiveFactor = glm::vec3(0.0f);
 
-    Material() = default;
+    // Nuevas propiedades para clearcoat (KHR_materials_clearcoat)
+    float clearcoatFactor = 0.0f;           // Por defecto 0: sin clearcoat.
+    float clearcoatRoughnessFactor = 0.0f;    // Por defecto 0: idealmente suave.
+
+    // Propiedades para transmission (KHR_materials_transmission)
+    float transmissionFactor = 0.0f;          // Por defecto 0: no transmite luz.
+    float ior = 1.45f;                        // Índice de refracción (valor típico para vidrio)
 };
