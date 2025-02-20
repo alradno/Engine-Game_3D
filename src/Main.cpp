@@ -32,7 +32,10 @@
 #include "Light.h"
 #include "LightManager.h"
 #include "ECSPlayerController.h"
-#include "GLDebug.h" // Para GLCall() y SetupOpenGLDebugCallback()
+#include "GLDebug.h"
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 float deltaTime = 0.0f, lastFrame = 0.0f;
 Camera camera;
@@ -53,6 +56,21 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
                          0.5);
 }
 
+void SetWorkingDirectoryToExecutablePath() {
+    #ifdef _WIN32
+        char exePath[MAX_PATH];
+        if (GetModuleFileNameA(NULL, exePath, MAX_PATH) != 0) {
+            std::filesystem::path p(exePath);
+            // Retroceder al directorio raíz del proyecto, asumiendo que el exe está en build/Release.
+            std::filesystem::path projectRoot = p.parent_path().parent_path().parent_path(); // Ajusta según la estructura real
+            std::filesystem::current_path(projectRoot);
+            Logger::Info(std::string("Working directory set to: ") + std::filesystem::current_path().string());
+        } else {
+            Logger::Error("Error obtaining the executable path.");
+        }
+    #endif
+}
+
 int main()
 {
     try
@@ -61,6 +79,7 @@ int main()
         Logger::SetLogFile("Toxic.log");
         Logger::SetLogLevel(LogLevel::DEBUG);
         Logger::Info("Main: Starting application.");
+        SetWorkingDirectoryToExecutablePath();
 
         // Cargar configuración desde config.yaml (ruta relativa).
         std::string configPath = "./config/config.yaml";
@@ -127,6 +146,7 @@ int main()
 
         // Cargar entidades desde entities.yaml (ruta relativa).
         std::string entityConfigPath = "./config/entities.yaml";
+
         EntityLoader::LoadEntitiesFromYAML(&coordinator, entityConfigPath);
 
         // Asumir que la primera entidad (ID 0) es el vehículo del jugador.
