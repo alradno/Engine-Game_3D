@@ -1,42 +1,38 @@
+// Coordinator.h
 #pragma once
 
 #include "EntityManager.h"
 #include "ComponentManager.h"
 #include "SystemManager.h"
+#include <memory>
 
-class Coordinator
-{
+class Coordinator {
 public:
-    void Init()
-    {
+    void Init() {
         mEntityManager = std::make_unique<EntityManager>();
         mComponentManager = std::make_unique<ComponentManager>();
         mSystemManager = std::make_unique<SystemManager>();
     }
 
-    // Entity methods
-    ECS::Entity CreateEntity()
-    {
+    // Métodos para entidades
+    ECS::Entity CreateEntity() {
         return mEntityManager->CreateEntity();
     }
 
-    void DestroyEntity(ECS::Entity entity)
-    {
+    void DestroyEntity(ECS::Entity entity) {
         mEntityManager->DestroyEntity(entity);
         mComponentManager->EntityDestroyed(entity);
         mSystemManager->EntityDestroyed(entity);
     }
 
-    // Component methods
+    // Métodos para componentes
     template <typename T>
-    void RegisterComponent()
-    {
+    void RegisterComponent() {
         mComponentManager->RegisterComponent<T>();
     }
 
     template <typename T>
-    void AddComponent(ECS::Entity entity, T component)
-    {
+    void AddComponent(ECS::Entity entity, T component) {
         mComponentManager->AddComponent<T>(entity, component);
         auto signature = mEntityManager->GetSignature(entity);
         signature.set(ECS::GetComponentTypeID<T>(), true);
@@ -45,8 +41,7 @@ public:
     }
 
     template <typename T>
-    void RemoveComponent(ECS::Entity entity)
-    {
+    void RemoveComponent(ECS::Entity entity) {
         mComponentManager->RemoveComponent<T>(entity);
         auto signature = mEntityManager->GetSignature(entity);
         signature.set(ECS::GetComponentTypeID<T>(), false);
@@ -55,27 +50,23 @@ public:
     }
 
     template <typename T>
-    T &GetComponent(ECS::Entity entity)
-    {
+    T &GetComponent(ECS::Entity entity) {
         return mComponentManager->GetComponent<T>(entity);
     }
 
     template <typename T>
-    ECS::ComponentType GetComponentType()
-    {
+    ECS::ComponentType GetComponentType() {
         return ECS::GetComponentTypeID<T>();
     }
 
-    // System methods
+    // Métodos para sistemas
     template <typename T>
-    std::shared_ptr<T> RegisterSystem()
-    {
+    std::shared_ptr<T> RegisterSystem() {
         return mSystemManager->RegisterSystem<T>();
     }
 
     template <typename T>
-    void SetSystemSignature(ECS::Signature signature)
-    {
+    void SetSystemSignature(ECS::Signature signature) {
         mSystemManager->SetSignature<T>(signature);
     }
 

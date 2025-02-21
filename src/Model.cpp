@@ -13,24 +13,20 @@
 #include <glm/gtc/type_ptr.hpp>
 
 /**
- * @brief Carga un material glTF usando la interfaz de Assimp.
- *
- * Se intenta extraer:
- *  - La textura de albedo: se busca primero en aiTextureType_BASE_COLOR y, si no se encuentra,
- *    en aiTextureType_DIFFUSE. Si no hay textura, se usa el factor "gltf.pbrMetallicRoughness.baseColorFactor".
- *  - La textura normal: de aiTextureType_NORMALS.
- *  - La textura metallic‑roughness: se busca en aiTextureType_UNKNOWN; de no existir, se leen
- *    "gltf.pbrMetallicRoughness.metallicFactor" y "gltf.pbrMetallicRoughness.roughnessFactor".
- *  - La textura de oclusión: de aiTextureType_AMBIENT.
- *  - La textura emisiva: de aiTextureType_EMISSIVE.
- *
- * Se utiliza FileUtils::ResolvePath para formar la ruta completa sin codificar nombres fijos.
+ * Carga el material de un mesh usando las propiedades glTF expuestas por Assimp.
+ * Se intentan cargar las texturas para:
+ *   - Albedo (usando BASE_COLOR o DIFFUSE). Si no existe, se extrae el factor "baseColorFactor".
+ *   - Normal (NORMALS)
+ *   - MetallicRoughness (UNKNOWN); de no existir, se leen "metallicFactor" y "roughnessFactor".
+ *   - Occlusion (AMBIENT)
+ *   - Emisivo (EMISSIVE)
+ * Se utilizan rutas resueltas de forma genérica.
  */
 Material LoadMaterial(aiMaterial* material, const std::string &modelDir) {
     Material mat;
     aiString texPath;
     
-    // Albedo: Buscar en BASE_COLOR o DIFFUSE
+    // Albedo: buscar en BASE_COLOR o DIFFUSE
     if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texPath) == AI_SUCCESS ||
         material->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == AI_SUCCESS) {
         std::string texPathStr = texPath.C_Str();
@@ -40,7 +36,6 @@ Material LoadMaterial(aiMaterial* material, const std::string &modelDir) {
         Logger::Debug("[LoadMaterial] Loading base color texture from: " + fullTexPath);
         mat.albedo = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
     } else {
-        // Si no se encuentra textura, leer el factor de color base del material
         aiColor4D baseColor;
         if (AI_SUCCESS == aiGetMaterialColor(material, "gltf.pbrMetallicRoughness.baseColorFactor", 0, 0, &baseColor)) {
             mat.baseColorFactor = glm::vec4(baseColor.r, baseColor.g, baseColor.b, baseColor.a);
@@ -82,7 +77,7 @@ Material LoadMaterial(aiMaterial* material, const std::string &modelDir) {
          }
     }
     
-    // Occlusion map (usualmente en aiTextureType_AMBIENT)
+    // Occlusion map (usualmente en AMBIENT)
     if (material->GetTexture(aiTextureType_AMBIENT, 0, &texPath) == AI_SUCCESS) {
          std::string texPathStr = texPath.C_Str();
          if (!texPathStr.empty() && texPathStr.front() == '/')
@@ -119,6 +114,10 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
         Logger::Info("[Model::processNode] Processing mesh from node: " + std::string(node->mName.C_Str()) +
                      ", vertices: " + std::to_string(mesh->mNumVertices));
         
+        // Reservar espacio para evitar realineaciones
+        submesh.vertices.reserve(mesh->mNumVertices);
+        submesh.indices.reserve(mesh->mNumFaces * 3);
+        
         glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(nodeTransform)));
         
         for (unsigned int j = 0; j < mesh->mNumVertices; j++) {
@@ -144,7 +143,6 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
             } else {
                 vertex.TexCoords = glm::vec2(0.0f);
             }
-            // Soporte para segundo set de UV
             if (mesh->HasTextureCoords(1)) {
                 vertex.TexCoords2 = glm::vec2(mesh->mTextureCoords[1][j].x,
                                               mesh->mTextureCoords[1][j].y);

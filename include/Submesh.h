@@ -1,3 +1,4 @@
+// Submesh.h
 #pragma once
 
 #include <vector>
@@ -19,7 +20,7 @@ struct Submesh {
     // Constructor por defecto
     Submesh() = default;
 
-    // Deshabilitar copia para evitar duplicar recursos
+    // Deshabilitar copia
     Submesh(const Submesh&) = delete;
     Submesh& operator=(const Submesh&) = delete;
 
@@ -57,7 +58,7 @@ struct Submesh {
         return *this;
     }
 
-    // Destructor para liberar recursos OpenGL
+    // Destructor
     ~Submesh(){
         if(VAO != 0) {
             GLCall(glDeleteVertexArrays(1, &VAO));
@@ -88,14 +89,14 @@ struct Submesh {
         GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
         GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW));
         
-        // Configuración de atributos de vértice:
+        // Atributos de vértice:
         GLCall(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0));
         GLCall(glEnableVertexAttribArray(0));
         GLCall(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal)));
         GLCall(glEnableVertexAttribArray(1));
         GLCall(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords)));
         GLCall(glEnableVertexAttribArray(2));
-        // Segundo set de UV en ubicación 4
+        // Segundo set de UV (ubicación 4)
         GLCall(glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords2)));
         GLCall(glEnableVertexAttribArray(4));
         GLCall(glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent)));
@@ -107,23 +108,31 @@ struct Submesh {
     }
     
     void Draw() {
-        if (VAO == 0 || indices.empty()) {
-            Logger::Warning("[Submesh] VAO not setup or no indices");
-            return;
-        }
+        // Optimización: cacheo de binding de texturas para evitar rebinds innecesarios
+        static unsigned int lastBoundTex0 = 0;
+        static unsigned int lastBoundTex1 = 0;
+        static unsigned int lastBoundTex2 = 0;
         
-        // Vincular texturas: albedo, metallicRoughness y normal
         if (material.albedo) {
             GLCall(glActiveTexture(GL_TEXTURE0));
-            GLCall(glBindTexture(GL_TEXTURE_2D, material.albedo->ID));
+            if(lastBoundTex0 != material.albedo->ID) {
+                GLCall(glBindTexture(GL_TEXTURE_2D, material.albedo->ID));
+                lastBoundTex0 = material.albedo->ID;
+            }
         }
         if (material.metallicRoughness) {
             GLCall(glActiveTexture(GL_TEXTURE1));
-            GLCall(glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID));
+            if(lastBoundTex1 != material.metallicRoughness->ID) {
+                GLCall(glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID));
+                lastBoundTex1 = material.metallicRoughness->ID;
+            }
         }
         if (material.normal) {
             GLCall(glActiveTexture(GL_TEXTURE2));
-            GLCall(glBindTexture(GL_TEXTURE_2D, material.normal->ID));
+            if(lastBoundTex2 != material.normal->ID) {
+                GLCall(glBindTexture(GL_TEXTURE_2D, material.normal->ID));
+                lastBoundTex2 = material.normal->ID;
+            }
         }
         
         GLCall(glBindVertexArray(VAO));

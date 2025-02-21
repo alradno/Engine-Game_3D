@@ -1,9 +1,11 @@
+// ResourceManager.cpp
 #include "ResourceManager.h"
 #include "FileUtils.h"
 #include "Logger.h"
 #include <filesystem>
 #include "GLDebug.h"
 #include <cassert>
+#include <future>
 
 Config ResourceManager::m_Config;
 std::map<std::string, std::shared_ptr<Shader>> ResourceManager::Shaders;
@@ -44,13 +46,10 @@ std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::strin
 {
     try
     {
-        std::string vertexShaderFile = m_Config.vertexShader; // Ejemplo: "pbr_vertex.glsl"
-        std::string fragmentShaderFile = fragmentShaderName;  // Ejemplo: "pbr_fragment.glsl"
-
-        // Resolver rutas usando la configuración global.
+        std::string vertexShaderFile = m_Config.vertexShader;
+        std::string fragmentShaderFile = fragmentShaderName;
         vertexShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexShaderFile);
         fragmentShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, fragmentShaderFile);
-
         return LoadShader(vertexShaderFile.c_str(), fragmentShaderFile.c_str(), key);
     }
     catch (const std::exception &e)
@@ -84,20 +83,18 @@ std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool a
             }
         }
 
-        Logger::Debug("[ResourceManager] Cargando imagen desde: " + filePath);
+        Logger::Debug("[ResourceManager] Loading image from: " + filePath);
 
         auto texture = std::make_shared<Texture2D>();
 
-        // Forzar el número de canales según 'alpha'
         int width, height, nrChannels;
         unsigned char *data = stbi_load(filePath.c_str(), &width, &height, &nrChannels, alpha ? 4 : 3);
-        // Assertion para asegurarse de que se cargó la imagen.
-        assert(data && "Error: Los datos de la imagen son nulos tras stbi_load.");
+        assert(data && "Error: Image data is null after stbi_load.");
         if (data)
         {
-            Logger::Debug("[ResourceManager] Imagen cargada: " + filePath +
+            Logger::Debug("[ResourceManager] Image loaded: " + filePath +
                           " (" + std::to_string(width) + "x" + std::to_string(height) +
-                          ", canales: " + std::to_string(nrChannels) + ")");
+                          ", channels: " + std::to_string(nrChannels) + ")");
             FileUtils::ImageData imgData;
             imgData.data = data;
             imgData.width = width;
@@ -144,23 +141,33 @@ std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string 
     }
 }
 
-std::shared_ptr<Shader> ResourceManager::GetShader(const std::string &name)
-{
+// Funciones asíncronas
+
+std::future<std::shared_ptr<Texture2D>> ResourceManager::LoadTextureAsync(const char *file, bool alpha, std::string name) {
+    return std::async(std::launch::async, [file, alpha, name]() {
+        return LoadTexture(file, alpha, name);
+    });
+}
+
+std::future<std::shared_ptr<Model>> ResourceManager::LoadModelAsync(const char *file, std::string name) {
+    return std::async(std::launch::async, [file, name]() {
+        return LoadModel(file, name);
+    });
+}
+
+std::shared_ptr<Shader> ResourceManager::GetShader(const std::string &name) {
     return Shaders[name];
 }
 
-std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string &name)
-{
+std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string &name) {
     return Textures[name];
 }
 
-std::shared_ptr<Model> ResourceManager::GetModel(const std::string &name)
-{
+std::shared_ptr<Model> ResourceManager::GetModel(const std::string &name) {
     return Models[name];
 }
 
-void ResourceManager::Clear()
-{
+void ResourceManager::Clear() {
     Logger::Info("[ResourceManager] Clearing all resources.");
     for (auto &iter : Shaders)
         GLCall(glDeleteProgram(iter.second->ID));

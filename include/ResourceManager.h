@@ -1,3 +1,4 @@
+// ResourceManager.h
 #pragma once
 #include <map>
 #include <string>
@@ -12,14 +13,15 @@ class ResourceManager {
 public:
     static void SetConfig(const Config& config) { m_Config = config; }
 
-    // Carga un shader dado un vertex y un fragment shader, con un nombre clave.
     static std::shared_ptr<Shader> LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name);
-    
-    // Carga un shader usando el vertex shader global (definido en config) y un fragment shader dado (sin extensión).
     static std::shared_ptr<Shader> LoadShaderWithFragment(const std::string& fragmentShaderName, const std::string& key);
 
     static std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, std::string name);
     static std::shared_ptr<Model> LoadModel(const char* file, std::string name);
+
+    // Funciones asíncronas
+    static std::future<std::shared_ptr<Texture2D>> LoadTextureAsync(const char* file, bool alpha, std::string name);
+    static std::future<std::shared_ptr<Model>> LoadModelAsync(const char* file, std::string name);
 
     static std::shared_ptr<Shader> GetShader(const std::string& name);
     static std::shared_ptr<Texture2D> GetTexture(const std::string& name);
