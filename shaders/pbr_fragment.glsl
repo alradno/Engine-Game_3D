@@ -59,8 +59,8 @@ void main() {
     float roughness = useMaps ? texture(metallicRoughnessMap, TexCoords).g : 1.0;
     vec3 tangentNormal = useMaps ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
     tangentNormal = tangentNormal * 2.0 - 1.0;
-    // Invertir el canal verde si es necesario.
-    tangentNormal.y = -tangentNormal.y;
+    // Para modelos glTF no se invierte el canal verde:
+    // tangentNormal.y = -tangentNormal.y;
     vec3 N = normalize(TBN * tangentNormal);
     
     vec3 F0 = mix(vec3(0.04), albedoColor, metallic);

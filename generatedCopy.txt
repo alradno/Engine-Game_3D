@@ -39,6 +39,14 @@ entities:
       model: "porsche/scene.gltf"
       shader: "pbr_fragment.glsl"
 
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [3.0, 3.0, 3.0]
+  #   render:
+  #     model: "bee/79342.fbx"
+  #     shader: "pbr_fragment.glsl"
+
 ------------------------------------------------------------
 Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Camera.h
 ------------------------------------------------------------

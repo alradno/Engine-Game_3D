@@ -1,7 +1,8 @@
+// Model.cpp
 #include "Model.h"
 #include "Submesh.h"
 #include "Material.h"
-#include "ResourceManager.h" // Si necesitas acceder a recursos para materiales
+#include "ResourceManager.h" // Para acceder a recursos de materiales
 #include "FileUtils.h"
 #include "Logger.h"
 #include <assimp/Importer.hpp>
@@ -11,30 +12,104 @@
 #include <filesystem>
 #include <glm/gtc/type_ptr.hpp>
 
-// Función para cargar un material a partir de un aiMaterial y la ruta base
+/**
+ * @brief Carga un material glTF usando la interfaz de Assimp.
+ *
+ * Se intenta extraer:
+ *  - La textura de albedo: se busca primero en aiTextureType_BASE_COLOR y, si no se encuentra,
+ *    en aiTextureType_DIFFUSE. Si no hay textura, se usa el factor "gltf.pbrMetallicRoughness.baseColorFactor".
+ *  - La textura normal: de aiTextureType_NORMALS.
+ *  - La textura metallic‑roughness: se busca en aiTextureType_UNKNOWN; de no existir, se leen
+ *    "gltf.pbrMetallicRoughness.metallicFactor" y "gltf.pbrMetallicRoughness.roughnessFactor".
+ *  - La textura de oclusión: de aiTextureType_AMBIENT.
+ *  - La textura emisiva: de aiTextureType_EMISSIVE.
+ *
+ * Se utiliza FileUtils::ResolvePath para formar la ruta completa sin codificar nombres fijos.
+ */
 Material LoadMaterial(aiMaterial* material, const std::string &modelDir) {
     Material mat;
     aiString texPath;
-    if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texPath) == AI_SUCCESS) {
+    
+    // Albedo: Buscar en BASE_COLOR o DIFFUSE
+    if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texPath) == AI_SUCCESS ||
+        material->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == AI_SUCCESS) {
         std::string texPathStr = texPath.C_Str();
         if (!texPathStr.empty() && texPathStr.front() == '/')
             texPathStr.erase(0, 1);
         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
-        Logger::Debug("[LoadMaterial] Loading texture from: " + fullTexPath);
+        Logger::Debug("[LoadMaterial] Loading base color texture from: " + fullTexPath);
         mat.albedo = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
     } else {
-        mat.baseColorFactor = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+        // Si no se encuentra textura, leer el factor de color base del material
+        aiColor4D baseColor;
+        if (AI_SUCCESS == aiGetMaterialColor(material, "gltf.pbrMetallicRoughness.baseColorFactor", 0, 0, &baseColor)) {
+            mat.baseColorFactor = glm::vec4(baseColor.r, baseColor.g, baseColor.b, baseColor.a);
+            Logger::Debug("[LoadMaterial] Using baseColorFactor: " +
+                          std::to_string(mat.baseColorFactor.r) + ", " +
+                          std::to_string(mat.baseColorFactor.g) + ", " +
+                          std::to_string(mat.baseColorFactor.b) + ", " +
+                          std::to_string(mat.baseColorFactor.a));
+        }
     }
+    
+    // Normal map
+    if (material->GetTexture(aiTextureType_NORMALS, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading normal texture from: " + fullTexPath);
+         mat.normal = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
+    }
+    
+    // MetallicRoughness map
+    if (material->GetTexture(aiTextureType_UNKNOWN, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading metallicRoughness texture from: " + fullTexPath);
+         mat.metallicRoughness = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
+    } else {
+         float metallic = 1.0f, roughness = 1.0f;
+         if (AI_SUCCESS == aiGetMaterialFloat(material, "gltf.pbrMetallicRoughness.metallicFactor", 0, 0, &metallic)) {
+             mat.metallicFactor = metallic;
+             Logger::Debug("[LoadMaterial] Metallic factor: " + std::to_string(metallic));
+         }
+         if (AI_SUCCESS == aiGetMaterialFloat(material, "gltf.pbrMetallicRoughness.roughnessFactor", 0, 0, &roughness)) {
+             mat.roughnessFactor = roughness;
+             Logger::Debug("[LoadMaterial] Roughness factor: " + std::to_string(roughness));
+         }
+    }
+    
+    // Occlusion map (usualmente en aiTextureType_AMBIENT)
+    if (material->GetTexture(aiTextureType_AMBIENT, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading occlusion texture from: " + fullTexPath);
+         mat.occlusion = ResourceManager::LoadTexture(fullTexPath.c_str(), false, fullTexPath);
+    }
+    
+    // Emissive map
+    if (material->GetTexture(aiTextureType_EMISSIVE, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading emissive texture from: " + fullTexPath);
+         mat.emissive = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
+    }
+    
     return mat;
 }
 
-// Constructor: llama a loadModel
 Model::Model(const std::string &path) {
     Logger::Info("[Model] Loading from: " + path);
     loadModel(path);
 }
 
-// Recorre la jerarquía de nodos y procesa cada malla
 void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& parentTransform, const std::string &modelDir) {
     glm::mat4 nodeTransform = parentTransform * aiMatrix4x4ToGlm(node->mTransformation);
     
@@ -63,11 +138,19 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
                 vertex.Normal = glm::vec3(0.0f);
             }
             
-            if (mesh->HasTextureCoords(0))
+            if (mesh->HasTextureCoords(0)) {
                 vertex.TexCoords = glm::vec2(mesh->mTextureCoords[0][j].x,
                                              mesh->mTextureCoords[0][j].y);
-            else
+            } else {
                 vertex.TexCoords = glm::vec2(0.0f);
+            }
+            // Soporte para segundo set de UV
+            if (mesh->HasTextureCoords(1)) {
+                vertex.TexCoords2 = glm::vec2(mesh->mTextureCoords[1][j].x,
+                                              mesh->mTextureCoords[1][j].y);
+            } else {
+                vertex.TexCoords2 = glm::vec2(0.0f);
+            }
             
             if (mesh->HasTangentsAndBitangents()) {
                 glm::vec3 tan(mesh->mTangents[j].x,
@@ -102,7 +185,6 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
     }
 }
 
-// Carga el modelo usando Assimp y procesa la jerarquía de nodos.
 void Model::loadModel(const std::string &path) {
     Logger::Info("[Model::loadModel] Starting load: " + path);
     
@@ -122,7 +204,6 @@ void Model::loadModel(const std::string &path) {
     processNode(scene->mRootNode, scene, glm::mat4(1.0f), modelDir);
 }
 
-// Dibuja cada submesh
 void Model::Draw() {
     for (auto &submesh : submeshes) {
         if (submesh.VAO != 0)

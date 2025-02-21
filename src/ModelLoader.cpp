@@ -1,8 +1,3 @@
-/**
- * @file ModelLoader.cpp
- * @brief Implementation of functions to process Assimp model nodes and convert data for rendering.
- */
-
 #include "ModelLoader.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
@@ -17,7 +12,7 @@ void processNode(aiNode *node, const aiScene *scene,
 {
     Logger::Debug("[ModelLoader] Processing node: " + std::string(node->mName.C_Str()));
     glm::mat4 nodeTransform = parentTransform;
-    // Uncomment the following line to apply the node's transformation:
+    // Si se requiere aplicar la transformación del nodo, descomenta la siguiente línea:
     // nodeTransform = parentTransform * aiMatrix4x4ToGlm(node->mTransformation);
 
     for (unsigned int i = 0; i < node->mNumMeshes; i++)
@@ -39,6 +34,12 @@ void processNode(aiNode *node, const aiScene *scene,
             vertex.TexCoords = mesh->HasTextureCoords(0)
                                    ? glm::vec2(mesh->mTextureCoords[0][j].x, mesh->mTextureCoords[0][j].y)
                                    : glm::vec2(0.0f);
+            // Soporte para segundo set de UV
+            if (mesh->HasTextureCoords(1))
+                vertex.TexCoords2 = glm::vec2(mesh->mTextureCoords[1][j].x, mesh->mTextureCoords[1][j].y);
+            else
+                vertex.TexCoords2 = glm::vec2(0.0f);
+            
             vertex.Tangent = mesh->HasTangentsAndBitangents()
                                  ? glm::normalize(glm::vec3(mesh->mTangents[j].x, mesh->mTangents[j].y, mesh->mTangents[j].z))
                                  : glm::vec3(0.0f);
@@ -56,7 +57,7 @@ void processNode(aiNode *node, const aiScene *scene,
         Logger::Debug("[ModelLoader] Mesh " + std::to_string(i) +
                       " processed (" + std::to_string(mesh->mNumFaces) + " faces)");
 
-        // Manually calculate tangents if missing
+        // Calcular tangentes manualmente si faltan
         if (!mesh->HasTangentsAndBitangents() && mesh->HasTextureCoords(0))
         {
             std::vector<glm::vec3> tempTangents(mesh->mNumVertices, glm::vec3(0.0f));

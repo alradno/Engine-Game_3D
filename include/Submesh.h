@@ -23,7 +23,7 @@ struct Submesh {
     Submesh(const Submesh&) = delete;
     Submesh& operator=(const Submesh&) = delete;
 
-    // Implementar constructor de movimiento
+    // Constructor de movimiento
     Submesh(Submesh&& other) noexcept {
         vertices = std::move(other.vertices);
         indices = std::move(other.indices);
@@ -36,10 +36,9 @@ struct Submesh {
         other.EBO = 0;
     }
 
-    // Implementar asignación por movimiento
+    // Asignación por movimiento
     Submesh& operator=(Submesh&& other) noexcept {
         if (this != &other) {
-            // Liberar recursos propios
             if(VAO != 0) GLCall(glDeleteVertexArrays(1, &VAO));
             if(VBO != 0) GLCall(glDeleteBuffers(1, &VBO));
             if(EBO != 0) GLCall(glDeleteBuffers(1, &EBO));
@@ -89,13 +88,16 @@ struct Submesh {
         GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
         GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW));
         
-        // Configuración de los atributos de vértice:
+        // Configuración de atributos de vértice:
         GLCall(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0));
         GLCall(glEnableVertexAttribArray(0));
         GLCall(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal)));
         GLCall(glEnableVertexAttribArray(1));
         GLCall(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords)));
         GLCall(glEnableVertexAttribArray(2));
+        // Segundo set de UV en ubicación 4
+        GLCall(glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords2)));
+        GLCall(glEnableVertexAttribArray(4));
         GLCall(glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent)));
         GLCall(glEnableVertexAttribArray(3));
         
@@ -110,7 +112,7 @@ struct Submesh {
             return;
         }
         
-        // Vincular texturas si están presentes
+        // Vincular texturas: albedo, metallicRoughness y normal
         if (material.albedo) {
             GLCall(glActiveTexture(GL_TEXTURE0));
             GLCall(glBindTexture(GL_TEXTURE_2D, material.albedo->ID));

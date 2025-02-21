@@ -43,7 +43,6 @@ target_link_libraries(Toxic PRIVATE
     gdi32
     ${CMAKE_SOURCE_DIR}/libs/glfw/lib/glfw3.lib
     ${CMAKE_SOURCE_DIR}/libs/glm/lib/glm.lib
-    ${CMAKE_SOURCE_DIR}/libs/tinygltf/lib/tinygltf.lib
     $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/libs/yamldebug/lib/yaml-cppd.lib>
     $<$<CONFIG:Release>:${CMAKE_SOURCE_DIR}/libs/yaml/lib/yaml-cpp.lib>
 )

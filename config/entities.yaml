@@ -8,10 +8,42 @@ entities:
   #     model: "car/scene.gltf"
   #     shader: "pbr_fragment.glsl"
 
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [3.0, 3.0, 3.0]
+  #   render:
+  #     model: "porsche/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [1.0, 1.0, 1.0]
+  #   render:
+  #     model: "destroyed_car/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [60.0, 60.0, 60.0]
+  #   render:
+  #     model: "train/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
   - transform:
       translation: [0.0, 0.0, 0.0]
       rotation: [0.0, 0.0, 0.0]
-      scale: [3.0, 3.0, 3.0]
+      scale: [100.0, 100.0, 100.0]
     render:
-      model: "porsche/scene.gltf"
+      model: "seahawk/scene.gltf"
       shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [3.0, 3.0, 3.0]
+  #   render:
+  #     model: "bee/79342.fbx"
+  #     shader: "pbr_fragment.glsl"
