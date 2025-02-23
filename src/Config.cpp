@@ -1,5 +1,5 @@
-#include "Config.h"
-#include "Logger.h"
+#include "engine/Config.h"
+#include "utils/Logger.h"
 #include <filesystem>
 
 Config Config::LoadFromFile(const std::string& configFilePath) {

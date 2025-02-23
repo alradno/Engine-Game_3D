@@ -87,7 +87,8 @@
         "bitset": "cpp",
         "coroutine": "cpp",
         "resumable": "cpp",
-        "valarray": "cpp"
+        "valarray": "cpp",
+        "typeindex": "cpp"
     },
     "C_Cpp.default.cppStandard": "c++23"
 }

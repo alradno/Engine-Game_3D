@@ -1,5 +1,5 @@
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\config\config.yaml
+Archivo: config\config.yaml
 ------------------------------------------------------------
 # config.yaml - Configuración global del motor
 projectRoot: "./"
@@ -19,25 +19,34 @@ lights:
     color: [1.0, 1.0, 1.0]
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\config\entities.yaml
+Archivo: config\entities.yaml
 ------------------------------------------------------------
 # entities.yaml - Definición de entidades
 entities:
-  # - transform:
-  #     translation: [0.0, 0.0, 0.0]
-  #     rotation: [0.0, 0.0, 0.0]
-  #     scale: [0.02, 0.02, 0.02]
-  #   render:
-  #     model: "car/scene.gltf"
-  #     shader: "pbr_fragment.glsl"
 
   - transform:
       translation: [0.0, 0.0, 0.0]
       rotation: [0.0, 0.0, 0.0]
-      scale: [3.0, 3.0, 3.0]
+      scale: [0.02, 0.02, 0.02]
     render:
-      model: "porsche/scene.gltf"
+      model: "car/scene.gltf"
       shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [60.0, 60.0, 60.0]
+  #   render:
+  #     model: "train/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [1.0, 1.0, 1.0]
+  #   render:
+  #     model: "scenary/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
 
   # - transform:
   #     translation: [0.0, 0.0, 0.0]
@@ -48,13 +57,382 @@ entities:
   #     shader: "pbr_fragment.glsl"
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Camera.h
+Archivo: include\components\RenderComponent.h
+------------------------------------------------------------
+#pragma once
+
+#include <memory>
+#include "renderer/Model.h"
+
+struct RenderComponent {
+    std::shared_ptr<Model> model;
+};
+
+------------------------------------------------------------
+Archivo: include\components\TransformComponent.h
+------------------------------------------------------------
+#pragma once
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/euler_angles.hpp>
+
+/**
+ * @struct TransformComponent
+ * @brief Componente de transformación para una entidad.
+ *
+ * Se utiliza la convención glTF:
+ *   - Sistema de coordenadas right-handed, con Y up.
+ *   - La transformación final se construye como: T * R * S.
+ *
+ * Esto significa que, para transformar un vértice \(v\):
+ *    v' = T * R * S * v
+ * se aplica primero la escala, luego la rotación y por último la traslación.
+ */
+struct TransformComponent {
+    glm::vec3 translation = glm::vec3(0.0f);
+    glm::vec3 rotation = glm::vec3(0.0f);  // (pitch, yaw, roll) en grados.
+    glm::vec3 scale = glm::vec3(1.0f);
+    glm::mat4 transform = glm::mat4(1.0f);
+
+    // Actualiza la transformación final: T * R * S.
+    void UpdateTransform() {
+        glm::mat4 T = glm::translate(glm::mat4(1.0f), translation);
+        glm::mat4 R = glm::yawPitchRoll(glm::radians(rotation.y),
+                                        glm::radians(rotation.x),
+                                        glm::radians(rotation.z));
+        glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
+        transform = T * R * S;
+    }
+};
+
+------------------------------------------------------------
+Archivo: include\core\ComponentManager.h
+------------------------------------------------------------
+// ComponentManager.h
+#pragma once
+
+#include "ECS.h"
+#include <unordered_map>
+#include <memory>
+#include <vector>
+#include <typeindex>
+#include <optional>
+#include <stdexcept>
+
+// Interfaz base para arrays de componentes
+class IComponentArray {
+public:
+    virtual ~IComponentArray() = default;
+    virtual void EntityDestroyed(ECS::Entity entity) = 0;
+};
+
+template<typename T>
+class ComponentArray : public IComponentArray {
+public:
+    ComponentArray() {
+        data.resize(ECS::MAX_ENTITIES);
+    }
+    
+    void InsertData(ECS::Entity entity, T component) {
+        data[entity] = component;
+    }
+    
+    void RemoveData(ECS::Entity entity) {
+        data[entity].reset();
+    }
+    
+    T& GetData(ECS::Entity entity) {
+        if (!data[entity].has_value())
+            throw std::runtime_error("Component not found for entity " + std::to_string(entity));
+        return data[entity].value();
+    }
+    
+    bool HasData(ECS::Entity entity) {
+        return data[entity].has_value();
+    }
+    
+    void EntityDestroyed(ECS::Entity entity) override {
+        data[entity].reset();
+    }
+private:
+    std::vector<std::optional<T>> data;
+};
+
+class ComponentManager {
+public:
+    template<typename T>
+    void RegisterComponent() {
+        std::type_index typeIndex(typeid(T));
+        if(componentArrays.find(typeIndex) != componentArrays.end())
+            throw std::runtime_error("Registering component type more than once.");
+        componentArrays[typeIndex] = std::make_shared<ComponentArray<T>>();
+    }
+    
+    template<typename T>
+    void AddComponent(ECS::Entity entity, T component) {
+        GetComponentArray<T>()->InsertData(entity, component);
+    }
+    
+    template<typename T>
+    void RemoveComponent(ECS::Entity entity) {
+        GetComponentArray<T>()->RemoveData(entity);
+    }
+    
+    template<typename T>
+    T& GetComponent(ECS::Entity entity) {
+        return GetComponentArray<T>()->GetData(entity);
+    }
+    
+    void EntityDestroyed(ECS::Entity entity) {
+        for(auto const& pair : componentArrays) {
+            pair.second->EntityDestroyed(entity);
+        }
+    }
+    
+private:
+    std::unordered_map<std::type_index, std::shared_ptr<IComponentArray>> componentArrays;
+    
+    template<typename T>
+    std::shared_ptr<ComponentArray<T>> GetComponentArray() {
+        std::type_index typeIndex(typeid(T));
+        if(componentArrays.find(typeIndex) == componentArrays.end())
+            throw std::runtime_error("Component not registered before use.");
+        return std::static_pointer_cast<ComponentArray<T>>(componentArrays[typeIndex]);
+    }
+};
+
+------------------------------------------------------------
+Archivo: include\core\Coordinator.h
+------------------------------------------------------------
+// Coordinator.h
+#pragma once
+
+#include "EntityManager.h"
+#include "core/ComponentManager.h"
+#include "systems/SystemManager.h"
+#include <memory>
+
+class Coordinator {
+public:
+    void Init() {
+        mEntityManager = std::make_unique<EntityManager>();
+        mComponentManager = std::make_unique<ComponentManager>();
+        mSystemManager = std::make_unique<SystemManager>();
+    }
+
+    // Métodos para entidades
+    ECS::Entity CreateEntity() {
+        return mEntityManager->CreateEntity();
+    }
+
+    void DestroyEntity(ECS::Entity entity) {
+        mEntityManager->DestroyEntity(entity);
+        mComponentManager->EntityDestroyed(entity);
+        mSystemManager->EntityDestroyed(entity);
+    }
+
+    // Métodos para componentes
+    template <typename T>
+    void RegisterComponent() {
+        mComponentManager->RegisterComponent<T>();
+    }
+
+    template <typename T>
+    void AddComponent(ECS::Entity entity, T component) {
+        mComponentManager->AddComponent<T>(entity, component);
+        auto signature = mEntityManager->GetSignature(entity);
+        signature.set(ECS::GetComponentTypeID<T>(), true);
+        mEntityManager->SetSignature(entity, signature);
+        mSystemManager->EntitySignatureChanged(entity, signature);
+    }
+
+    template <typename T>
+    void RemoveComponent(ECS::Entity entity) {
+        mComponentManager->RemoveComponent<T>(entity);
+        auto signature = mEntityManager->GetSignature(entity);
+        signature.set(ECS::GetComponentTypeID<T>(), false);
+        mEntityManager->SetSignature(entity, signature);
+        mSystemManager->EntitySignatureChanged(entity, signature);
+    }
+
+    template <typename T>
+    T &GetComponent(ECS::Entity entity) {
+        return mComponentManager->GetComponent<T>(entity);
+    }
+
+    template <typename T>
+    ECS::ComponentType GetComponentType() {
+        return ECS::GetComponentTypeID<T>();
+    }
+
+    // Métodos para sistemas
+    template <typename T>
+    std::shared_ptr<T> RegisterSystem() {
+        return mSystemManager->RegisterSystem<T>();
+    }
+
+    template <typename T>
+    void SetSystemSignature(ECS::Signature signature) {
+        mSystemManager->SetSignature<T>(signature);
+    }
+
+private:
+    std::unique_ptr<EntityManager> mEntityManager;
+    std::unique_ptr<ComponentManager> mComponentManager;
+    std::unique_ptr<SystemManager> mSystemManager;
+};
+
+------------------------------------------------------------
+Archivo: include\core\ECS.h
+------------------------------------------------------------
+#pragma once
+
+#include <cstdint>
+#include <bitset>
+
+namespace ECS
+{
+    using Entity = uint32_t;
+    const Entity MAX_ENTITIES = 5000;
+
+    using ComponentType = uint8_t;
+    const ComponentType MAX_COMPONENTS = 32;
+
+    using Signature = std::bitset<MAX_COMPONENTS>;
+
+    // Get a new unique ComponentType ID for each component type
+    inline ComponentType GetNewComponentTypeID()
+    {
+        static ComponentType lastID = 0u;
+        return lastID++;
+    }
+
+    template <typename T>
+    inline ComponentType GetComponentTypeID() noexcept
+    {
+        static ComponentType typeID = GetNewComponentTypeID();
+        return typeID;
+    }
+}
+
+------------------------------------------------------------
+Archivo: include\core\EntityLoader.h
+------------------------------------------------------------
+/**
+ * @file EntityLoader.h
+ * @brief Declaration of the EntityLoader class used to load entities from a YAML configuration file.
+ *
+ * The loader reads a YAML file and creates entities with their corresponding components
+ * (for example, TransformComponent and RenderComponent).
+ */
+
+ #ifndef ENTITYLOADER_H
+ #define ENTITYLOADER_H
+ 
+ #include "core/Coordinator.h"
+ #include <string>
+ 
+ class EntityLoader {
+ public:
+     /**
+      * @brief Loads entities and their components from a YAML file.
+      * @param coordinator Pointer to the ECS Coordinator.
+      * @param filename Path to the YAML configuration file.
+      */
+     static void LoadEntitiesFromYAML(Coordinator* coordinator, const std::string& filename);
+ };
+ 
+ #endif // ENTITYLOADER_H
+ 
+
+------------------------------------------------------------
+Archivo: include\core\EntityManager.h
+------------------------------------------------------------
+#pragma once
+
+#include "ECS.h"
+#include <queue>
+#include <array>
+#include <stdexcept>
+
+class EntityManager
+{
+public:
+    EntityManager() : mLivingEntityCount(0)
+    {
+        for (ECS::Entity entity = 0; entity < ECS::MAX_ENTITIES; ++entity)
+        {
+            mAvailableEntities.push(entity);
+        }
+    }
+
+    ECS::Entity CreateEntity()
+    {
+        if (mLivingEntityCount >= ECS::MAX_ENTITIES)
+        {
+            throw std::runtime_error("Too many entities in existence.");
+        }
+        ECS::Entity id = mAvailableEntities.front();
+        mAvailableEntities.pop();
+        mLivingEntityCount++;
+        return id;
+    }
+
+    void DestroyEntity(ECS::Entity entity)
+    {
+        mSignatures[entity].reset();
+        mAvailableEntities.push(entity);
+        mLivingEntityCount--;
+    }
+
+    void SetSignature(ECS::Entity entity, ECS::Signature signature)
+    {
+        mSignatures[entity] = signature;
+    }
+
+    ECS::Signature GetSignature(ECS::Entity entity)
+    {
+        return mSignatures[entity];
+    }
+
+private:
+    std::queue<ECS::Entity> mAvailableEntities;
+    std::array<ECS::Signature, ECS::MAX_ENTITIES> mSignatures;
+    uint32_t mLivingEntityCount;
+};
+
+------------------------------------------------------------
+Archivo: include\core\ModelLoader.h
+------------------------------------------------------------
+#pragma once
+
+#include <glm/glm.hpp>
+#include <vector>
+#include <assimp/scene.h>
+#include "utils/Logger.h"
+
+struct Vertex {
+    glm::vec3 Position;
+    glm::vec3 Normal;
+    glm::vec2 TexCoords;
+    glm::vec2 TexCoords2; // Segundo set de coordenadas UV
+    glm::vec3 Tangent;
+};
+
+void processNode(aiNode* node, const aiScene* scene,
+                 std::vector<Vertex>& vertices,
+                 std::vector<unsigned int>& indices,
+                 const glm::mat4& parentTransform);
+
+------------------------------------------------------------
+Archivo: include\engine\Camera.h
 ------------------------------------------------------------
 #pragma once
 
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include "Logger.h"
+#include "utils/Logger.h"
 
 class Camera {
 public:
@@ -129,95 +507,7 @@ private:
 };
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ComponentManager.h
-------------------------------------------------------------
-#pragma once
-
-#include "ECS.h"
-#include <unordered_map>
-#include <memory>
-#include <stdexcept>
-#include <typeinfo>
-
-// Base interface for component arrays
-class IComponentArray {
-public:
-    virtual ~IComponentArray() = default;
-    // Declare RemoveData in the interface to allow override
-    virtual void RemoveData(ECS::Entity entity) = 0;
-    virtual void EntityDestroyed(ECS::Entity entity) = 0;
-};
-
-template <typename T>
-class ComponentArray : public IComponentArray {
-public:
-    void InsertData(ECS::Entity entity, T component) {
-        mComponentMap[entity] = component;
-    }
-    // Now this override is valid because RemoveData is declared in IComponentArray.
-    void RemoveData(ECS::Entity entity) override {
-        mComponentMap.erase(entity);
-    }
-    T& GetData(ECS::Entity entity) {
-        return mComponentMap.at(entity);
-    }
-    bool HasData(ECS::Entity entity) {
-        return mComponentMap.find(entity) != mComponentMap.end();
-    }
-    void EntityDestroyed(ECS::Entity entity) override {
-        mComponentMap.erase(entity);
-    }
-private:
-    std::unordered_map<ECS::Entity, T> mComponentMap;
-};
-
-class ComponentManager {
-public:
-    template <typename T>
-    void RegisterComponent() {
-        const char* typeName = typeid(T).name();
-        if (mComponentArrays.find(typeName) != mComponentArrays.end()) {
-            throw std::runtime_error("Registering component type more than once.");
-        }
-        mComponentArrays[typeName] = std::make_shared<ComponentArray<T>>();
-    }
-    
-    template <typename T>
-    void AddComponent(ECS::Entity entity, T component) {
-        GetComponentArray<T>()->InsertData(entity, component);
-    }
-    
-    template <typename T>
-    void RemoveComponent(ECS::Entity entity) {
-        GetComponentArray<T>()->RemoveData(entity);
-    }
-    
-    template <typename T>
-    T& GetComponent(ECS::Entity entity) {
-        return GetComponentArray<T>()->GetData(entity);
-    }
-    
-    void EntityDestroyed(ECS::Entity entity) {
-        for (auto const& pair : mComponentArrays) {
-            pair.second->EntityDestroyed(entity);
-        }
-    }
-    
-private:
-    std::unordered_map<const char*, std::shared_ptr<IComponentArray>> mComponentArrays;
-    
-    template <typename T>
-    std::shared_ptr<ComponentArray<T>> GetComponentArray() {
-        const char* typeName = typeid(T).name();
-        if (mComponentArrays.find(typeName) == mComponentArrays.end()) {
-            throw std::runtime_error("Component not registered before use.");
-        }
-        return std::static_pointer_cast<ComponentArray<T>>(mComponentArrays[typeName]);
-    }
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Config.h
+Archivo: include\engine\Config.h
 ------------------------------------------------------------
 #pragma once
 #include <string>
@@ -248,136 +538,13 @@ public:
 };
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Coordinator.h
+Archivo: include\engine\ECSPlayerController.h
 ------------------------------------------------------------
 #pragma once
 
-#include "EntityManager.h"
-#include "ComponentManager.h"
-#include "SystemManager.h"
-
-class Coordinator
-{
-public:
-    void Init()
-    {
-        mEntityManager = std::make_unique<EntityManager>();
-        mComponentManager = std::make_unique<ComponentManager>();
-        mSystemManager = std::make_unique<SystemManager>();
-    }
-
-    // Entity methods
-    ECS::Entity CreateEntity()
-    {
-        return mEntityManager->CreateEntity();
-    }
-
-    void DestroyEntity(ECS::Entity entity)
-    {
-        mEntityManager->DestroyEntity(entity);
-        mComponentManager->EntityDestroyed(entity);
-        mSystemManager->EntityDestroyed(entity);
-    }
-
-    // Component methods
-    template <typename T>
-    void RegisterComponent()
-    {
-        mComponentManager->RegisterComponent<T>();
-    }
-
-    template <typename T>
-    void AddComponent(ECS::Entity entity, T component)
-    {
-        mComponentManager->AddComponent<T>(entity, component);
-        auto signature = mEntityManager->GetSignature(entity);
-        signature.set(ECS::GetComponentTypeID<T>(), true);
-        mEntityManager->SetSignature(entity, signature);
-        mSystemManager->EntitySignatureChanged(entity, signature);
-    }
-
-    template <typename T>
-    void RemoveComponent(ECS::Entity entity)
-    {
-        mComponentManager->RemoveComponent<T>(entity);
-        auto signature = mEntityManager->GetSignature(entity);
-        signature.set(ECS::GetComponentTypeID<T>(), false);
-        mEntityManager->SetSignature(entity, signature);
-        mSystemManager->EntitySignatureChanged(entity, signature);
-    }
-
-    template <typename T>
-    T &GetComponent(ECS::Entity entity)
-    {
-        return mComponentManager->GetComponent<T>(entity);
-    }
-
-    template <typename T>
-    ECS::ComponentType GetComponentType()
-    {
-        return ECS::GetComponentTypeID<T>();
-    }
-
-    // System methods
-    template <typename T>
-    std::shared_ptr<T> RegisterSystem()
-    {
-        return mSystemManager->RegisterSystem<T>();
-    }
-
-    template <typename T>
-    void SetSystemSignature(ECS::Signature signature)
-    {
-        mSystemManager->SetSignature<T>(signature);
-    }
-
-private:
-    std::unique_ptr<EntityManager> mEntityManager;
-    std::unique_ptr<ComponentManager> mComponentManager;
-    std::unique_ptr<SystemManager> mSystemManager;
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ECS.h
-------------------------------------------------------------
-#pragma once
-
-#include <cstdint>
-#include <bitset>
-
-namespace ECS
-{
-    using Entity = uint32_t;
-    const Entity MAX_ENTITIES = 5000;
-
-    using ComponentType = uint8_t;
-    const ComponentType MAX_COMPONENTS = 32;
-
-    using Signature = std::bitset<MAX_COMPONENTS>;
-
-    // Get a new unique ComponentType ID for each component type
-    inline ComponentType GetNewComponentTypeID()
-    {
-        static ComponentType lastID = 0u;
-        return lastID++;
-    }
-
-    template <typename T>
-    inline ComponentType GetComponentTypeID() noexcept
-    {
-        static ComponentType typeID = GetNewComponentTypeID();
-        return typeID;
-    }
-}
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ECSPlayerController.h
-------------------------------------------------------------
-#pragma once
-
-#include "Coordinator.h"
-#include "TransformComponent.h"
-#include "Logger.h"
+#include "core/Coordinator.h"
+#include "components/TransformComponent.h"
+#include "utils/Logger.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <GLFW/glfw3.h>
@@ -513,98 +680,686 @@ private:
 };
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\EntityLoader.h
-------------------------------------------------------------
-/**
- * @file EntityLoader.h
- * @brief Declaration of the EntityLoader class used to load entities from a YAML configuration file.
- *
- * The loader reads a YAML file and creates entities with their corresponding components
- * (for example, TransformComponent and RenderComponent).
- */
-
- #ifndef ENTITYLOADER_H
- #define ENTITYLOADER_H
- 
- #include "Coordinator.h"
- #include <string>
- 
- class EntityLoader {
- public:
-     /**
-      * @brief Loads entities and their components from a YAML file.
-      * @param coordinator Pointer to the ECS Coordinator.
-      * @param filename Path to the YAML configuration file.
-      */
-     static void LoadEntitiesFromYAML(Coordinator* coordinator, const std::string& filename);
- };
- 
- #endif // ENTITYLOADER_H
- 
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\EntityManager.h
+Archivo: include\engine\Light.h
 ------------------------------------------------------------
 #pragma once
 
-#include "ECS.h"
-#include <queue>
-#include <array>
-#include <stdexcept>
+#include <glm/glm.hpp>
+#include "utils/Logger.h"
+#include <string>
 
-class EntityManager
-{
-public:
-    EntityManager() : mLivingEntityCount(0)
-    {
-        for (ECS::Entity entity = 0; entity < ECS::MAX_ENTITIES; ++entity)
-        {
-            mAvailableEntities.push(entity);
-        }
+enum class LightType : int { POINT = 0, SPOT = 1, DIRECTIONAL = 2 };
+
+struct Light {
+    glm::vec4 typeAndPadding;   // x: tipo, yzw: padding
+    glm::vec4 position;         // xyz: posición, w: padding
+    glm::vec4 direction;        // xyz: dirección, w: padding
+    glm::vec4 colorAndIntensity;// rgb: color, a: intensidad
+    glm::vec4 spotParams;       // x: cutOff, y: outerCutOff, z/w: padding
+
+    inline void LogLightDetails() const {
+        Logger::Debug("[Light] Type: " + std::to_string(typeAndPadding.x));
+        Logger::Debug("[Light] Position: (" + std::to_string(position.x) + ", " +
+                      std::to_string(position.y) + ", " + std::to_string(position.z) + ")");
+        Logger::Debug("[Light] Direction: (" + std::to_string(direction.x) + ", " +
+                      std::to_string(direction.y) + ", " + std::to_string(direction.z) + ")");
+        Logger::Debug("[Light] Color: (" + std::to_string(colorAndIntensity.x) + ", " +
+                      std::to_string(colorAndIntensity.y) + ", " + std::to_string(colorAndIntensity.z) + ")");
+        Logger::Debug("[Light] Intensity: " + std::to_string(colorAndIntensity.w));
+        Logger::Debug("[Light] Spot Params: (cutOff: " + std::to_string(spotParams.x) +
+                      ", outerCutOff: " + std::to_string(spotParams.y) + ")");
     }
-
-    ECS::Entity CreateEntity()
-    {
-        if (mLivingEntityCount >= ECS::MAX_ENTITIES)
-        {
-            throw std::runtime_error("Too many entities in existence.");
-        }
-        ECS::Entity id = mAvailableEntities.front();
-        mAvailableEntities.pop();
-        mLivingEntityCount++;
-        return id;
-    }
-
-    void DestroyEntity(ECS::Entity entity)
-    {
-        mSignatures[entity].reset();
-        mAvailableEntities.push(entity);
-        mLivingEntityCount--;
-    }
-
-    void SetSignature(ECS::Entity entity, ECS::Signature signature)
-    {
-        mSignatures[entity] = signature;
-    }
-
-    ECS::Signature GetSignature(ECS::Entity entity)
-    {
-        return mSignatures[entity];
-    }
-
-private:
-    std::queue<ECS::Entity> mAvailableEntities;
-    std::array<ECS::Signature, ECS::MAX_ENTITIES> mSignatures;
-    uint32_t mLivingEntityCount;
 };
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\FileUtils.h
+Archivo: include\engine\LightManager.h
+------------------------------------------------------------
+#pragma once
+
+#include <vector>
+#include "Light.h"
+#include "utils/UniformBuffer.h"
+#include "utils/Logger.h"
+#include <glad/glad.h>
+#include <glm/glm.hpp>
+
+class LightManager {
+public:
+    std::vector<Light> lights;
+    UniformBuffer lightUBO;
+
+    LightManager() {
+        Logger::Info("[LightManager] Created and UBO initialized.");
+    }
+    
+    void UpdateUBO() {
+        // Se usa throttling para evitar loguear cada frame.
+        Logger::ThrottledLog("LightManager_UpdateUBO", LogLevel::INFO, "[LightManager] Updating UBO", 0.5);
+        constexpr int maxLights = 10;
+        std::vector<Light> lightData(maxLights);
+        for (int i = 0; i < maxLights; i++) {
+            if (i < static_cast<int>(lights.size()))
+                lightData[i] = lights[i];
+            else {
+                lightData[i].typeAndPadding = glm::vec4(-1, 0, 0, 0);
+                lightData[i].position = glm::vec4(0.0f);
+                lightData[i].direction = glm::vec4(0.0f);
+                lightData[i].colorAndIntensity = glm::vec4(0.0f);
+                lightData[i].spotParams = glm::vec4(0.0f);
+            }
+        }
+        size_t dataSize = lightData.size() * sizeof(Light);
+        lightUBO.Bind();
+        glBufferData(GL_UNIFORM_BUFFER, dataSize, lightData.data(), GL_DYNAMIC_DRAW);
+        lightUBO.Unbind();
+        Logger::ThrottledLog("LightManager_UBOUpdated", LogLevel::INFO,
+            "[LightManager] UBO updated (" + std::to_string(lights.size()) +
+            " active lights, max " + std::to_string(maxLights) + ").", 0.5);
+    }
+    
+    void AddLight(const Light& light) {
+        lights.push_back(light);
+        Logger::Debug("[LightManager] Added light. Total: " + std::to_string(lights.size()));
+    }
+    
+    void ClearLights() {
+        lights.clear();
+        Logger::Info("[LightManager] Cleared all lights.");
+    }
+};
+
+------------------------------------------------------------
+Archivo: include\renderer\IShaderFactory.h
+------------------------------------------------------------
+/**
+ * @file IShaderFactory.h
+ * @brief Interface for a shader factory. Provides a method to create Shader objects.
+ */
+
+#pragma once
+#include <memory>
+#include "renderer/Shader.h"
+
+class IShaderFactory {
+public:
+    virtual std::shared_ptr<Shader> CreateShader(const std::string &vertexPath,
+                                                 const std::string &fragmentPath) = 0;
+    virtual ~IShaderFactory() = default;
+};
+
+------------------------------------------------------------
+Archivo: include\renderer\Material.h
+------------------------------------------------------------
+#pragma once
+#include <memory>
+#include "Texture2D.h"
+#include <glm/glm.hpp>
+
+struct Material
+{
+    // Texturas utilizadas en el material
+    std::shared_ptr<Texture2D> albedo;
+    std::shared_ptr<Texture2D> metallicRoughness;
+    std::shared_ptr<Texture2D> normal;
+    std::shared_ptr<Texture2D> occlusion;
+    std::shared_ptr<Texture2D> emissive;
+
+    // Factores base para PBR
+    glm::vec4 baseColorFactor = glm::vec4(1.0f);
+    float metallicFactor = 1.0f;
+    float roughnessFactor = 1.0f;
+    glm::vec3 emissiveFactor = glm::vec3(0.0f);
+
+    // Nuevas propiedades para clearcoat (KHR_materials_clearcoat)
+    float clearcoatFactor = 0.0f;           // Por defecto 0: sin clearcoat.
+    float clearcoatRoughnessFactor = 0.0f;    // Por defecto 0: idealmente suave.
+
+    // Propiedades para transmission (KHR_materials_transmission)
+    float transmissionFactor = 0.0f;          // Por defecto 0: no transmite luz.
+    float ior = 1.45f;                        // Índice de refracción (valor típico para vidrio)
+};
+
+------------------------------------------------------------
+Archivo: include\renderer\Model.h
+------------------------------------------------------------
+#pragma once
+
+#include <string>
+#include <vector>
+#include "renderer/Submesh.h"
+#include "utils/Logger.h"
+#include <assimp/scene.h>
+#include <glm/glm.hpp>
+
+// Función inline para convertir un aiMatrix4x4 a glm::mat4
+inline glm::mat4 aiMatrix4x4ToGlm(const aiMatrix4x4 &from) {
+    glm::mat4 to;
+    to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
+    to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
+    to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
+    to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
+    return to;
+}
+
+class Model {
+public:
+    // Constructor: carga el modelo desde el archivo especificado
+    Model(const std::string &path);
+
+    // Método para dibujar el modelo
+    void Draw();
+
+    // Vector de submeshes
+    std::vector<Submesh> submeshes;
+
+private:
+    // Método para cargar el modelo
+    void loadModel(const std::string &path);
+
+    // Función recursiva para procesar la jerarquía de nodos
+    void processNode(aiNode* node, const aiScene* scene, const glm::mat4& parentTransform, const std::string &modelDir);
+};
+
+------------------------------------------------------------
+Archivo: include\renderer\ResourceManager.h
+------------------------------------------------------------
+// ResourceManager.h
+#pragma once
+#include <map>
+#include <string>
+#include <memory>
+#include <future>
+#include "renderer/Shader.h"
+#include "renderer/Texture2D.h"
+#include "renderer/Model.h"
+#include "engine/Config.h"
+
+class ResourceManager {
+public:
+    static void SetConfig(const Config& config) { m_Config = config; }
+
+    static std::shared_ptr<Shader> LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name);
+    static std::shared_ptr<Shader> LoadShaderWithFragment(const std::string& fragmentShaderName, const std::string& key);
+
+    static std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, std::string name);
+    static std::shared_ptr<Model> LoadModel(const char* file, std::string name);
+
+    // Funciones asíncronas
+    static std::future<std::shared_ptr<Texture2D>> LoadTextureAsync(const char* file, bool alpha, std::string name);
+    static std::future<std::shared_ptr<Model>> LoadModelAsync(const char* file, std::string name);
+
+    static std::shared_ptr<Shader> GetShader(const std::string& name);
+    static std::shared_ptr<Texture2D> GetTexture(const std::string& name);
+    static std::shared_ptr<Model> GetModel(const std::string& name);
+
+    static void Clear();
+
+private:
+    ResourceManager() = default;
+    static Config m_Config;
+    static std::map<std::string, std::shared_ptr<Shader>> Shaders;
+    static std::map<std::string, std::shared_ptr<Texture2D>> Textures;
+    static std::map<std::string, std::shared_ptr<Model>> Models;
+};
+
+------------------------------------------------------------
+Archivo: include\renderer\Shader.h
+------------------------------------------------------------
+#pragma once
+
+#include <glad/glad.h>
+#include <string>
+#include <fstream>
+#include <sstream>
+#include "utils/Logger.h"
+
+class Shader {
+public:
+    unsigned int ID = 0;
+    
+    Shader() = default;
+    
+    void Compile(const char* vertexPath, const char* fragmentPath) {
+        std::string vertexCode, fragmentCode;
+        std::ifstream vShaderFile, fShaderFile;
+        vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
+        
+        try {
+            Logger::Debug("[Shader] Opening: " + std::string(vertexPath));
+            vShaderFile.open(vertexPath);
+            Logger::Debug("[Shader] Opening: " + std::string(fragmentPath));
+            fShaderFile.open(fragmentPath);
+            std::stringstream vShaderStream, fShaderStream;
+            vShaderStream << vShaderFile.rdbuf();
+            fShaderStream << fShaderFile.rdbuf();
+            vertexCode = vShaderStream.str();
+            fragmentCode = fShaderStream.str();
+            vShaderFile.close();
+            fShaderFile.close();
+        } catch (std::ifstream::failure&) {
+            Logger::Error("[Shader] ERROR: Failed to read shader files");
+        }
+        
+        const char* vShaderCode = vertexCode.c_str();
+        const char* fShaderCode = fragmentCode.c_str();
+        unsigned int vertex, fragment;
+        int success;
+        char infoLog[512];
+        
+        // Vertex shader
+        vertex = glCreateShader(GL_VERTEX_SHADER);
+        glShaderSource(vertex, 1, &vShaderCode, nullptr);
+        glCompileShader(vertex);
+        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(vertex, 512, nullptr, infoLog);
+            Logger::Error("[Shader] Vertex compilation failed:\n" + std::string(infoLog));
+        } else {
+            Logger::Info("[Shader] Vertex shader compiled");
+        }
+        
+        // Fragment shader
+        fragment = glCreateShader(GL_FRAGMENT_SHADER);
+        glShaderSource(fragment, 1, &fShaderCode, nullptr);
+        glCompileShader(fragment);
+        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+        if (!success) {
+            glGetShaderInfoLog(fragment, 512, nullptr, infoLog);
+            Logger::Error("[Shader] Fragment compilation failed:\n" + std::string(infoLog));
+        } else {
+            Logger::Info("[Shader] Fragment shader compiled");
+        }
+        
+        // Shader program
+        ID = glCreateProgram();
+        glAttachShader(ID, vertex);
+        glAttachShader(ID, fragment);
+        glLinkProgram(ID);
+        glGetProgramiv(ID, GL_LINK_STATUS, &success);
+        if (!success) {
+            glGetProgramInfoLog(ID, 512, nullptr, infoLog);
+            Logger::Error("[Shader] Linking failed:\n" + std::string(infoLog));
+        } else {
+            Logger::Info("[Shader] Program linked. ID: " + std::to_string(ID));
+        }
+        
+        glDeleteShader(vertex);
+        glDeleteShader(fragment);
+    }
+    
+    void Use() {
+        glUseProgram(ID);
+    }
+};
+
+------------------------------------------------------------
+Archivo: include\renderer\ShaderFactory.h
+------------------------------------------------------------
+/**
+ * @file ShaderFactory.h
+ * @brief Concrete implementation of IShaderFactory. Creates Shader objects.
+ */
+
+ #pragma once
+ #include "IShaderFactory.h"
+ #include "utils/Logger.h"
+ #include <memory>
+ #include <string>
+ 
+ class ShaderFactory : public IShaderFactory {
+ public:
+     std::shared_ptr<Shader> CreateShader(const std::string& vertexPath,
+                                          const std::string& fragmentPath) override {
+         auto shader = std::make_shared<Shader>();
+         shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
+         Logger::Info("[ShaderFactory] Shader created with ID: " + std::to_string(shader->ID));
+         return shader;
+     }
+ }; 
+
+------------------------------------------------------------
+Archivo: include\renderer\Submesh.h
+------------------------------------------------------------
+// Submesh.h
+#pragma once
+
+#include <vector>
+#include <glad/glad.h>
+#include "core/ModelLoader.h"
+#include "renderer/Material.h"
+#include "utils/Logger.h"
+#include "utils/GLDebug.h"   // Para GLCall, etc.
+#include <cstddef>
+
+struct Submesh {
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+    unsigned int VAO = 0;
+    unsigned int VBO = 0;
+    unsigned int EBO = 0;
+    Material material;
+
+    // Constructor por defecto
+    Submesh() = default;
+
+    // Deshabilitar copia
+    Submesh(const Submesh&) = delete;
+    Submesh& operator=(const Submesh&) = delete;
+
+    // Constructor de movimiento
+    Submesh(Submesh&& other) noexcept {
+        vertices = std::move(other.vertices);
+        indices = std::move(other.indices);
+        VAO = other.VAO;
+        VBO = other.VBO;
+        EBO = other.EBO;
+        material = std::move(other.material);
+        other.VAO = 0;
+        other.VBO = 0;
+        other.EBO = 0;
+    }
+
+    // Asignación por movimiento
+    Submesh& operator=(Submesh&& other) noexcept {
+        if (this != &other) {
+            if(VAO != 0) GLCall(glDeleteVertexArrays(1, &VAO));
+            if(VBO != 0) GLCall(glDeleteBuffers(1, &VBO));
+            if(EBO != 0) GLCall(glDeleteBuffers(1, &EBO));
+
+            vertices = std::move(other.vertices);
+            indices = std::move(other.indices);
+            VAO = other.VAO;
+            VBO = other.VBO;
+            EBO = other.EBO;
+            material = std::move(other.material);
+
+            other.VAO = 0;
+            other.VBO = 0;
+            other.EBO = 0;
+        }
+        return *this;
+    }
+
+    // Destructor
+    ~Submesh(){
+        if(VAO != 0) {
+            GLCall(glDeleteVertexArrays(1, &VAO));
+        }
+        if(VBO != 0) {
+            GLCall(glDeleteBuffers(1, &VBO));
+        }
+        if(EBO != 0) {
+            GLCall(glDeleteBuffers(1, &EBO));
+        }
+    }
+    
+    void setupMesh() {
+        if (vertices.empty() || indices.empty()) {
+            Logger::Warning("[Submesh] No vertices or indices to setup");
+            return;
+        }
+        
+        GLCall(glGenVertexArrays(1, &VAO));
+        GLCall(glGenBuffers(1, &VBO));
+        GLCall(glGenBuffers(1, &EBO));
+        
+        GLCall(glBindVertexArray(VAO));
+        
+        GLCall(glBindBuffer(GL_ARRAY_BUFFER, VBO));
+        GLCall(glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW));
+        
+        GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
+        GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW));
+        
+        // Atributos de vértice:
+        GLCall(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0));
+        GLCall(glEnableVertexAttribArray(0));
+        GLCall(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal)));
+        GLCall(glEnableVertexAttribArray(1));
+        GLCall(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords)));
+        GLCall(glEnableVertexAttribArray(2));
+        // Segundo set de UV (ubicación 4)
+        GLCall(glVertexAttribPointer(4, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords2)));
+        GLCall(glEnableVertexAttribArray(4));
+        GLCall(glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent)));
+        GLCall(glEnableVertexAttribArray(3));
+        
+        GLCall(glBindVertexArray(0));
+        Logger::Info("[Submesh] Setup complete (" + std::to_string(vertices.size()) + " vertices, " +
+                     std::to_string(indices.size()) + " indices)");
+    }
+    
+    void Draw() {
+        // Optimización: cacheo de binding de texturas para evitar rebinds innecesarios
+        static unsigned int lastBoundTex0 = 0;
+        static unsigned int lastBoundTex1 = 0;
+        static unsigned int lastBoundTex2 = 0;
+        
+        if (material.albedo) {
+            GLCall(glActiveTexture(GL_TEXTURE0));
+            if(lastBoundTex0 != material.albedo->ID) {
+                GLCall(glBindTexture(GL_TEXTURE_2D, material.albedo->ID));
+                lastBoundTex0 = material.albedo->ID;
+            }
+        }
+        if (material.metallicRoughness) {
+            GLCall(glActiveTexture(GL_TEXTURE1));
+            if(lastBoundTex1 != material.metallicRoughness->ID) {
+                GLCall(glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID));
+                lastBoundTex1 = material.metallicRoughness->ID;
+            }
+        }
+        if (material.normal) {
+            GLCall(glActiveTexture(GL_TEXTURE2));
+            if(lastBoundTex2 != material.normal->ID) {
+                GLCall(glBindTexture(GL_TEXTURE_2D, material.normal->ID));
+                lastBoundTex2 = material.normal->ID;
+            }
+        }
+        
+        GLCall(glBindVertexArray(VAO));
+        GLCall(glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, nullptr));
+        GLCall(glBindVertexArray(0));
+    }
+};
+
+------------------------------------------------------------
+Archivo: include\renderer\Texture2D.h
+------------------------------------------------------------
+#pragma once
+
+#include <glad/glad.h>
+#include <string>
+#include "stb_image.h"
+#include "utils/FileUtils.h" // Define ImageData.
+#include "utils/Logger.h"
+#include "utils/GLDebug.h" // Para usar GLCall, etc.
+
+class Texture2D
+{
+public:
+    unsigned int ID = 0;
+    int Width = 0, Height = 0;
+    GLenum Internal_Format = GL_RGB;                                     // Formato interno
+    GLenum Image_Format = GL_RGB;                                        // Formato de la imagen cargada
+    GLenum Wrap_S = GL_REPEAT, Wrap_T = GL_REPEAT;                       // Wrapping
+    GLenum Filter_Min = GL_LINEAR_MIPMAP_LINEAR, Filter_Mag = GL_LINEAR; // Filtros
+
+    // Constructor: genera la textura en OpenGL y registra el ID.
+    Texture2D()
+    {
+        GLCall(glGenTextures(1, &ID));
+        Logger::Debug("[Texture2D] Generated ID: " + std::to_string(ID));
+    }
+
+    // Método no recomendado: carga síncrona de textura.
+    void Generate(const char *file, bool alpha)
+    {
+        Logger::Warning("[Texture2D] Use GenerateFromData instead");
+    }
+
+    /**
+     * @brief Genera la textura a partir de los datos de imagen proporcionados.
+     * @param img Datos de la imagen (ancho, alto, canales y puntero a los datos).
+     * @param alpha Indica si se espera que la imagen tenga canal alfa.
+     */
+    void GenerateFromData(const FileUtils::ImageData &img, bool alpha)
+    {
+        if (!img.data)
+        {
+            Logger::Error("[Texture2D] Image data is null");
+            return;
+        }
+        Width = img.width;
+        Height = img.height;
+        int desired_channels = alpha ? 4 : 3;
+        GLenum format = (desired_channels == 4) ? GL_RGBA : GL_RGB;
+
+        // Configuración de formatos y parámetros según si se usa alfa.
+        if (alpha)
+        {
+            Internal_Format = GL_SRGB_ALPHA;
+            Image_Format = GL_RGBA;
+            Wrap_S = GL_CLAMP_TO_EDGE;
+            Wrap_T = GL_CLAMP_TO_EDGE;
+        }
+        else
+        {
+            Internal_Format = GL_RGB;
+            Image_Format = GL_RGB;
+        }
+
+        GLCall(glBindTexture(GL_TEXTURE_2D, ID));
+        GLCall(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
+        GLCall(glTexImage2D(GL_TEXTURE_2D, 0, Internal_Format, Width, Height, 0, format, GL_UNSIGNED_BYTE, img.data));
+        GLCall(glGenerateMipmap(GL_TEXTURE_2D));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, Wrap_S));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, Wrap_T));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, Filter_Min));
+        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, Filter_Mag));
+        GLCall(glBindTexture(GL_TEXTURE_2D, 0));
+
+        Logger::Info("[Texture2D] Texture generated (ID: " + std::to_string(ID) + ")");
+        stbi_image_free(img.data);
+    }
+};
+
+------------------------------------------------------------
+Archivo: include\systems\RenderSystem.h
+------------------------------------------------------------
+// RenderSystem.h
+#pragma once
+
+#include "System.h"
+#include "components/TransformComponent.h"
+#include "components/RenderComponent.h"
+#include "core/Coordinator.h"
+#include "renderer/Shader.h"
+#include "engine/Camera.h"
+#include <glad/glad.h>
+#include <glm/glm.hpp>
+#include <vector>
+#include <algorithm>
+
+class RenderSystem : public System {
+public:
+    RenderSystem() : mCoordinator(nullptr), mShader(nullptr), mCamera(nullptr), mModelLoc(-1) { }
+    
+    void Init(Coordinator* coordinator, Shader* shader, Camera* camera);
+    void Update(float dt);
+    
+private:
+    Coordinator* mCoordinator;
+    Shader* mShader;
+    Camera* mCamera;
+    int mModelLoc; // Ubicación cacheada de la uniform "model"
+};
+
+------------------------------------------------------------
+Archivo: include\systems\System.h
+------------------------------------------------------------
+#pragma once
+
+#include "core/ECS.h"
+#include <set>
+
+class System
+{
+public:
+    std::set<ECS::Entity> mEntities;
+};
+
+------------------------------------------------------------
+Archivo: include\systems\SystemManager.h
+------------------------------------------------------------
+#pragma once
+
+#include "System.h"
+#include <memory>
+#include <unordered_map>
+#include <stdexcept>
+#include <typeinfo>
+
+class SystemManager
+{
+public:
+    template <typename T>
+    std::shared_ptr<T> RegisterSystem()
+    {
+        const char *typeName = typeid(T).name();
+        if (mSystems.find(typeName) != mSystems.end())
+        {
+            throw std::runtime_error("Registering system more than once.");
+        }
+        auto system = std::make_shared<T>();
+        mSystems[typeName] = system;
+        return system;
+    }
+
+    template <typename T>
+    void SetSignature(ECS::Signature signature)
+    {
+        const char *typeName = typeid(T).name();
+        mSignatures[typeName] = signature;
+    }
+
+    void EntityDestroyed(ECS::Entity entity)
+    {
+        for (auto const &pair : mSystems)
+        {
+            pair.second->mEntities.erase(entity);
+        }
+    }
+
+    void EntitySignatureChanged(ECS::Entity entity, ECS::Signature entitySignature)
+    {
+        for (auto const &pair : mSystems)
+        {
+            auto const &systemSignature = mSignatures[pair.first];
+            if ((entitySignature & systemSignature) == systemSignature)
+            {
+                pair.second->mEntities.insert(entity);
+            }
+            else
+            {
+                pair.second->mEntities.erase(entity);
+            }
+        }
+    }
+
+private:
+    std::unordered_map<const char *, ECS::Signature> mSignatures;
+    std::unordered_map<const char *, std::shared_ptr<System>> mSystems;
+};
+
+------------------------------------------------------------
+Archivo: include\utils\FileUtils.h
 ------------------------------------------------------------
 #pragma once
 #include <string>
 #include <filesystem>
-#include "Logger.h"
+#include "utils/Logger.h"
 
 namespace FileUtils
 {
@@ -641,11 +1396,11 @@ namespace FileUtils
 } // namespace FileUtils
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\GLDebug.h
+Archivo: include\utils\GLDebug.h
 ------------------------------------------------------------
 #pragma once
 #include <glad/glad.h>
-#include "Logger.h"
+#include "utils/Logger.h"
 #include <sstream>
 
 // Función para limpiar todos los errores previos de OpenGL.
@@ -723,115 +1478,7 @@ inline void SetupOpenGLDebugCallback()
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\IShaderFactory.h
-------------------------------------------------------------
-/**
- * @file IShaderFactory.h
- * @brief Interface for a shader factory. Provides a method to create Shader objects.
- */
-
-#pragma once
-#include <memory>
-#include "Shader.h"
-
-class IShaderFactory {
-public:
-    virtual std::shared_ptr<Shader> CreateShader(const std::string &vertexPath,
-                                                 const std::string &fragmentPath) = 0;
-    virtual ~IShaderFactory() = default;
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Light.h
-------------------------------------------------------------
-#pragma once
-
-#include <glm/glm.hpp>
-#include "Logger.h"
-#include <string>
-
-enum class LightType : int { POINT = 0, SPOT = 1, DIRECTIONAL = 2 };
-
-struct Light {
-    glm::vec4 typeAndPadding;   // x: tipo, yzw: padding
-    glm::vec4 position;         // xyz: posición, w: padding
-    glm::vec4 direction;        // xyz: dirección, w: padding
-    glm::vec4 colorAndIntensity;// rgb: color, a: intensidad
-    glm::vec4 spotParams;       // x: cutOff, y: outerCutOff, z/w: padding
-
-    inline void LogLightDetails() const {
-        Logger::Debug("[Light] Type: " + std::to_string(typeAndPadding.x));
-        Logger::Debug("[Light] Position: (" + std::to_string(position.x) + ", " +
-                      std::to_string(position.y) + ", " + std::to_string(position.z) + ")");
-        Logger::Debug("[Light] Direction: (" + std::to_string(direction.x) + ", " +
-                      std::to_string(direction.y) + ", " + std::to_string(direction.z) + ")");
-        Logger::Debug("[Light] Color: (" + std::to_string(colorAndIntensity.x) + ", " +
-                      std::to_string(colorAndIntensity.y) + ", " + std::to_string(colorAndIntensity.z) + ")");
-        Logger::Debug("[Light] Intensity: " + std::to_string(colorAndIntensity.w));
-        Logger::Debug("[Light] Spot Params: (cutOff: " + std::to_string(spotParams.x) +
-                      ", outerCutOff: " + std::to_string(spotParams.y) + ")");
-    }
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\LightManager.h
-------------------------------------------------------------
-#pragma once
-
-#include <vector>
-#include "Light.h"
-#include "UniformBuffer.h"
-#include "Logger.h"
-#include <glad/glad.h>
-#include <glm/glm.hpp>
-
-class LightManager {
-public:
-    std::vector<Light> lights;
-    UniformBuffer lightUBO;
-
-    LightManager() {
-        Logger::Info("[LightManager] Created and UBO initialized.");
-    }
-    
-    void UpdateUBO() {
-        // Se usa throttling para evitar loguear cada frame.
-        Logger::ThrottledLog("LightManager_UpdateUBO", LogLevel::INFO, "[LightManager] Updating UBO", 0.5);
-        constexpr int maxLights = 10;
-        std::vector<Light> lightData(maxLights);
-        for (int i = 0; i < maxLights; i++) {
-            if (i < static_cast<int>(lights.size()))
-                lightData[i] = lights[i];
-            else {
-                lightData[i].typeAndPadding = glm::vec4(-1, 0, 0, 0);
-                lightData[i].position = glm::vec4(0.0f);
-                lightData[i].direction = glm::vec4(0.0f);
-                lightData[i].colorAndIntensity = glm::vec4(0.0f);
-                lightData[i].spotParams = glm::vec4(0.0f);
-            }
-        }
-        size_t dataSize = lightData.size() * sizeof(Light);
-        lightUBO.Bind();
-        glBufferData(GL_UNIFORM_BUFFER, dataSize, lightData.data(), GL_DYNAMIC_DRAW);
-        lightUBO.Unbind();
-        Logger::ThrottledLog("LightManager_UBOUpdated", LogLevel::INFO,
-            "[LightManager] UBO updated (" + std::to_string(lights.size()) +
-            " active lights, max " + std::to_string(maxLights) + ").", 0.5);
-    }
-    
-    void AddLight(const Light& light) {
-        lights.push_back(light);
-        Logger::Debug("[LightManager] Added light. Total: " + std::to_string(lights.size()));
-    }
-    
-    void ClearLights() {
-        lights.clear();
-        Logger::Info("[LightManager] Cleared all lights.");
-    }
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Logger.h
+Archivo: include\utils\Logger.h
 ------------------------------------------------------------
 /**
  * @file Logger.h
@@ -1113,655 +1760,12 @@ private:
 };
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Material.h
-------------------------------------------------------------
-#pragma once
-#include <memory>
-#include "Texture2D.h"
-#include <glm/glm.hpp>
-
-struct Material
-{
-    // Texturas utilizadas en el material
-    std::shared_ptr<Texture2D> albedo;
-    std::shared_ptr<Texture2D> metallicRoughness;
-    std::shared_ptr<Texture2D> normal;
-    std::shared_ptr<Texture2D> occlusion;
-    std::shared_ptr<Texture2D> emissive;
-
-    // Factores base para PBR
-    glm::vec4 baseColorFactor = glm::vec4(1.0f);
-    float metallicFactor = 1.0f;
-    float roughnessFactor = 1.0f;
-    glm::vec3 emissiveFactor = glm::vec3(0.0f);
-
-    // Nuevas propiedades para clearcoat (KHR_materials_clearcoat)
-    float clearcoatFactor = 0.0f;           // Por defecto 0: sin clearcoat.
-    float clearcoatRoughnessFactor = 0.0f;    // Por defecto 0: idealmente suave.
-
-    // Propiedades para transmission (KHR_materials_transmission)
-    float transmissionFactor = 0.0f;          // Por defecto 0: no transmite luz.
-    float ior = 1.45f;                        // Índice de refracción (valor típico para vidrio)
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Model.h
-------------------------------------------------------------
-#pragma once
-
-#include <string>
-#include <vector>
-#include "Submesh.h"
-#include "Logger.h"
-#include <assimp/scene.h>
-#include <glm/glm.hpp>
-
-// Función inline para convertir un aiMatrix4x4 a glm::mat4
-inline glm::mat4 aiMatrix4x4ToGlm(const aiMatrix4x4 &from) {
-    glm::mat4 to;
-    to[0][0] = from.a1; to[1][0] = from.a2; to[2][0] = from.a3; to[3][0] = from.a4;
-    to[0][1] = from.b1; to[1][1] = from.b2; to[2][1] = from.b3; to[3][1] = from.b4;
-    to[0][2] = from.c1; to[1][2] = from.c2; to[2][2] = from.c3; to[3][2] = from.c4;
-    to[0][3] = from.d1; to[1][3] = from.d2; to[2][3] = from.d3; to[3][3] = from.d4;
-    return to;
-}
-
-class Model {
-public:
-    // Constructor: carga el modelo desde el archivo especificado
-    Model(const std::string &path);
-
-    // Método para dibujar el modelo
-    void Draw();
-
-    // Vector de submeshes
-    std::vector<Submesh> submeshes;
-
-private:
-    // Método para cargar el modelo
-    void loadModel(const std::string &path);
-
-    // Función recursiva para procesar la jerarquía de nodos
-    void processNode(aiNode* node, const aiScene* scene, const glm::mat4& parentTransform, const std::string &modelDir);
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ModelLoader.h
-------------------------------------------------------------
-#pragma once
-
-#include <glm/glm.hpp>
-#include <vector>
-#include <assimp/scene.h>
-#include "Logger.h"
-
-struct Vertex {
-    glm::vec3 Position;
-    glm::vec3 Normal;
-    glm::vec2 TexCoords;
-    glm::vec3 Tangent;
-};
-
-void processNode(aiNode* node, const aiScene* scene,
-                 std::vector<Vertex>& vertices,
-                 std::vector<unsigned int>& indices,
-                 const glm::mat4& parentTransform);
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\RenderComponent.h
-------------------------------------------------------------
-#pragma once
-
-#include <memory>
-#include "Model.h"
-
-struct RenderComponent {
-    std::shared_ptr<Model> model;
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\RenderSystem.h
-------------------------------------------------------------
-#pragma once
-
-#include "System.h"
-#include "TransformComponent.h"
-#include "RenderComponent.h"
-#include "Coordinator.h"
-#include "Shader.h"
-#include "Camera.h"
-#include <glad/glad.h>
-#include <glm/glm.hpp>
-
-/**
- * @class RenderSystem
- * @brief Sistema de renderizado para entidades que tienen TransformComponent y RenderComponent.
- */
-class RenderSystem : public System {
-public:
-    RenderSystem() : mCoordinator(nullptr), mShader(nullptr), mCamera(nullptr) { }
-    
-    void Init(Coordinator* coordinator, Shader* shader, Camera* camera) {
-        mCoordinator = coordinator;
-        mShader = shader;
-        mCamera = camera;
-    }
-    
-    void Update(float dt) {
-        if (!mCoordinator || !mShader || !mCamera) return;
-        
-        // Para cada entidad que tenga TransformComponent y RenderComponent:
-        for (auto entity : mEntities) {
-            auto& transform = mCoordinator->GetComponent<TransformComponent>(entity);
-            // Actualiza la transformación usando el valor almacenado en rotation.y
-            transform.UpdateTransform();
-            glUniformMatrix4fv(glGetUniformLocation(mShader->ID, "model"), 1, GL_FALSE, &transform.transform[0][0]);
-            auto& render = mCoordinator->GetComponent<RenderComponent>(entity);
-            if (render.model)
-                render.model->Draw();
-        }
-    }
-    
-private:
-    Coordinator* mCoordinator;
-    Shader* mShader;
-    Camera* mCamera;
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ResourceManager.h
-------------------------------------------------------------
-#pragma once
-#include <map>
-#include <string>
-#include <memory>
-#include <future>
-#include "Shader.h"
-#include "Texture2D.h"
-#include "Model.h"
-#include "Config.h"
-
-class ResourceManager {
-public:
-    static void SetConfig(const Config& config) { m_Config = config; }
-
-    // Carga un shader dado un vertex y un fragment shader, con un nombre clave.
-    static std::shared_ptr<Shader> LoadShader(const char* vShaderFile, const char* fShaderFile, std::string name);
-    
-    // Carga un shader usando el vertex shader global (definido en config) y un fragment shader dado (sin extensión).
-    static std::shared_ptr<Shader> LoadShaderWithFragment(const std::string& fragmentShaderName, const std::string& key);
-
-    static std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, std::string name);
-    static std::shared_ptr<Model> LoadModel(const char* file, std::string name);
-
-    static std::shared_ptr<Shader> GetShader(const std::string& name);
-    static std::shared_ptr<Texture2D> GetTexture(const std::string& name);
-    static std::shared_ptr<Model> GetModel(const std::string& name);
-
-    static void Clear();
-
-private:
-    ResourceManager() = default;
-    static Config m_Config;
-    static std::map<std::string, std::shared_ptr<Shader>> Shaders;
-    static std::map<std::string, std::shared_ptr<Texture2D>> Textures;
-    static std::map<std::string, std::shared_ptr<Model>> Models;
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Shader.h
+Archivo: include\utils\UniformBuffer.h
 ------------------------------------------------------------
 #pragma once
 
 #include <glad/glad.h>
-#include <string>
-#include <fstream>
-#include <sstream>
-#include "Logger.h"
-
-class Shader {
-public:
-    unsigned int ID = 0;
-    
-    Shader() = default;
-    
-    void Compile(const char* vertexPath, const char* fragmentPath) {
-        std::string vertexCode, fragmentCode;
-        std::ifstream vShaderFile, fShaderFile;
-        vShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        fShaderFile.exceptions(std::ifstream::failbit | std::ifstream::badbit);
-        
-        try {
-            Logger::Debug("[Shader] Opening: " + std::string(vertexPath));
-            vShaderFile.open(vertexPath);
-            Logger::Debug("[Shader] Opening: " + std::string(fragmentPath));
-            fShaderFile.open(fragmentPath);
-            std::stringstream vShaderStream, fShaderStream;
-            vShaderStream << vShaderFile.rdbuf();
-            fShaderStream << fShaderFile.rdbuf();
-            vertexCode = vShaderStream.str();
-            fragmentCode = fShaderStream.str();
-            vShaderFile.close();
-            fShaderFile.close();
-        } catch (std::ifstream::failure&) {
-            Logger::Error("[Shader] ERROR: Failed to read shader files");
-        }
-        
-        const char* vShaderCode = vertexCode.c_str();
-        const char* fShaderCode = fragmentCode.c_str();
-        unsigned int vertex, fragment;
-        int success;
-        char infoLog[512];
-        
-        // Vertex shader
-        vertex = glCreateShader(GL_VERTEX_SHADER);
-        glShaderSource(vertex, 1, &vShaderCode, nullptr);
-        glCompileShader(vertex);
-        glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(vertex, 512, nullptr, infoLog);
-            Logger::Error("[Shader] Vertex compilation failed:\n" + std::string(infoLog));
-        } else {
-            Logger::Info("[Shader] Vertex shader compiled");
-        }
-        
-        // Fragment shader
-        fragment = glCreateShader(GL_FRAGMENT_SHADER);
-        glShaderSource(fragment, 1, &fShaderCode, nullptr);
-        glCompileShader(fragment);
-        glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
-        if (!success) {
-            glGetShaderInfoLog(fragment, 512, nullptr, infoLog);
-            Logger::Error("[Shader] Fragment compilation failed:\n" + std::string(infoLog));
-        } else {
-            Logger::Info("[Shader] Fragment shader compiled");
-        }
-        
-        // Shader program
-        ID = glCreateProgram();
-        glAttachShader(ID, vertex);
-        glAttachShader(ID, fragment);
-        glLinkProgram(ID);
-        glGetProgramiv(ID, GL_LINK_STATUS, &success);
-        if (!success) {
-            glGetProgramInfoLog(ID, 512, nullptr, infoLog);
-            Logger::Error("[Shader] Linking failed:\n" + std::string(infoLog));
-        } else {
-            Logger::Info("[Shader] Program linked. ID: " + std::to_string(ID));
-        }
-        
-        glDeleteShader(vertex);
-        glDeleteShader(fragment);
-    }
-    
-    void Use() {
-        glUseProgram(ID);
-    }
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\ShaderFactory.h
-------------------------------------------------------------
-/**
- * @file ShaderFactory.h
- * @brief Concrete implementation of IShaderFactory. Creates Shader objects.
- */
-
- #pragma once
- #include "IShaderFactory.h"
- #include "Logger.h"
- #include <memory>
- #include <string>
- 
- class ShaderFactory : public IShaderFactory {
- public:
-     std::shared_ptr<Shader> CreateShader(const std::string& vertexPath,
-                                          const std::string& fragmentPath) override {
-         auto shader = std::make_shared<Shader>();
-         shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
-         Logger::Info("[ShaderFactory] Shader created with ID: " + std::to_string(shader->ID));
-         return shader;
-     }
- }; 
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Submesh.h
-------------------------------------------------------------
-#pragma once
-
-#include <vector>
-#include <glad/glad.h>
-#include "ModelLoader.h"
-#include "Material.h"
-#include "Logger.h"
-#include "GLDebug.h"   // Para GLCall, etc.
-#include <cstddef>
-
-struct Submesh {
-    std::vector<Vertex> vertices;
-    std::vector<unsigned int> indices;
-    unsigned int VAO = 0;
-    unsigned int VBO = 0;
-    unsigned int EBO = 0;
-    Material material;
-
-    // Constructor por defecto
-    Submesh() = default;
-
-    // Deshabilitar copia para evitar duplicar recursos
-    Submesh(const Submesh&) = delete;
-    Submesh& operator=(const Submesh&) = delete;
-
-    // Implementar constructor de movimiento
-    Submesh(Submesh&& other) noexcept {
-        vertices = std::move(other.vertices);
-        indices = std::move(other.indices);
-        VAO = other.VAO;
-        VBO = other.VBO;
-        EBO = other.EBO;
-        material = std::move(other.material);
-        other.VAO = 0;
-        other.VBO = 0;
-        other.EBO = 0;
-    }
-
-    // Implementar asignación por movimiento
-    Submesh& operator=(Submesh&& other) noexcept {
-        if (this != &other) {
-            // Liberar recursos propios
-            if(VAO != 0) GLCall(glDeleteVertexArrays(1, &VAO));
-            if(VBO != 0) GLCall(glDeleteBuffers(1, &VBO));
-            if(EBO != 0) GLCall(glDeleteBuffers(1, &EBO));
-
-            vertices = std::move(other.vertices);
-            indices = std::move(other.indices);
-            VAO = other.VAO;
-            VBO = other.VBO;
-            EBO = other.EBO;
-            material = std::move(other.material);
-
-            other.VAO = 0;
-            other.VBO = 0;
-            other.EBO = 0;
-        }
-        return *this;
-    }
-
-    // Destructor para liberar recursos OpenGL
-    ~Submesh(){
-        if(VAO != 0) {
-            GLCall(glDeleteVertexArrays(1, &VAO));
-        }
-        if(VBO != 0) {
-            GLCall(glDeleteBuffers(1, &VBO));
-        }
-        if(EBO != 0) {
-            GLCall(glDeleteBuffers(1, &EBO));
-        }
-    }
-    
-    void setupMesh() {
-        if (vertices.empty() || indices.empty()) {
-            Logger::Warning("[Submesh] No vertices or indices to setup");
-            return;
-        }
-        
-        GLCall(glGenVertexArrays(1, &VAO));
-        GLCall(glGenBuffers(1, &VBO));
-        GLCall(glGenBuffers(1, &EBO));
-        
-        GLCall(glBindVertexArray(VAO));
-        
-        GLCall(glBindBuffer(GL_ARRAY_BUFFER, VBO));
-        GLCall(glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW));
-        
-        GLCall(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO));
-        GLCall(glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW));
-        
-        // Configuración de los atributos de vértice:
-        GLCall(glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)0));
-        GLCall(glEnableVertexAttribArray(0));
-        GLCall(glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Normal)));
-        GLCall(glEnableVertexAttribArray(1));
-        GLCall(glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, TexCoords)));
-        GLCall(glEnableVertexAttribArray(2));
-        GLCall(glVertexAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, Tangent)));
-        GLCall(glEnableVertexAttribArray(3));
-        
-        GLCall(glBindVertexArray(0));
-        Logger::Info("[Submesh] Setup complete (" + std::to_string(vertices.size()) + " vertices, " +
-                     std::to_string(indices.size()) + " indices)");
-    }
-    
-    void Draw() {
-        if (VAO == 0 || indices.empty()) {
-            Logger::Warning("[Submesh] VAO not setup or no indices");
-            return;
-        }
-        
-        // Vincular texturas si están presentes
-        if (material.albedo) {
-            GLCall(glActiveTexture(GL_TEXTURE0));
-            GLCall(glBindTexture(GL_TEXTURE_2D, material.albedo->ID));
-        }
-        if (material.metallicRoughness) {
-            GLCall(glActiveTexture(GL_TEXTURE1));
-            GLCall(glBindTexture(GL_TEXTURE_2D, material.metallicRoughness->ID));
-        }
-        if (material.normal) {
-            GLCall(glActiveTexture(GL_TEXTURE2));
-            GLCall(glBindTexture(GL_TEXTURE_2D, material.normal->ID));
-        }
-        
-        GLCall(glBindVertexArray(VAO));
-        GLCall(glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, nullptr));
-        GLCall(glBindVertexArray(0));
-    }
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\System.h
-------------------------------------------------------------
-#pragma once
-
-#include "ECS.h"
-#include <set>
-
-class System
-{
-public:
-    std::set<ECS::Entity> mEntities;
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\SystemManager.h
-------------------------------------------------------------
-#pragma once
-
-#include "System.h"
-#include <memory>
-#include <unordered_map>
-#include <stdexcept>
-#include <typeinfo>
-
-class SystemManager
-{
-public:
-    template <typename T>
-    std::shared_ptr<T> RegisterSystem()
-    {
-        const char *typeName = typeid(T).name();
-        if (mSystems.find(typeName) != mSystems.end())
-        {
-            throw std::runtime_error("Registering system more than once.");
-        }
-        auto system = std::make_shared<T>();
-        mSystems[typeName] = system;
-        return system;
-    }
-
-    template <typename T>
-    void SetSignature(ECS::Signature signature)
-    {
-        const char *typeName = typeid(T).name();
-        mSignatures[typeName] = signature;
-    }
-
-    void EntityDestroyed(ECS::Entity entity)
-    {
-        for (auto const &pair : mSystems)
-        {
-            pair.second->mEntities.erase(entity);
-        }
-    }
-
-    void EntitySignatureChanged(ECS::Entity entity, ECS::Signature entitySignature)
-    {
-        for (auto const &pair : mSystems)
-        {
-            auto const &systemSignature = mSignatures[pair.first];
-            if ((entitySignature & systemSignature) == systemSignature)
-            {
-                pair.second->mEntities.insert(entity);
-            }
-            else
-            {
-                pair.second->mEntities.erase(entity);
-            }
-        }
-    }
-
-private:
-    std::unordered_map<const char *, ECS::Signature> mSignatures;
-    std::unordered_map<const char *, std::shared_ptr<System>> mSystems;
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\Texture2D.h
-------------------------------------------------------------
-#pragma once
-
-#include <glad/glad.h>
-#include <string>
-#include "stb_image.h"
-#include "FileUtils.h" // Define ImageData.
-#include "Logger.h"
-#include "GLDebug.h" // Para usar GLCall, etc.
-
-class Texture2D
-{
-public:
-    unsigned int ID = 0;
-    int Width = 0, Height = 0;
-    GLenum Internal_Format = GL_RGB;                                     // Formato interno
-    GLenum Image_Format = GL_RGB;                                        // Formato de la imagen cargada
-    GLenum Wrap_S = GL_REPEAT, Wrap_T = GL_REPEAT;                       // Wrapping
-    GLenum Filter_Min = GL_LINEAR_MIPMAP_LINEAR, Filter_Mag = GL_LINEAR; // Filtros
-
-    // Constructor: genera la textura en OpenGL y registra el ID.
-    Texture2D()
-    {
-        GLCall(glGenTextures(1, &ID));
-        Logger::Debug("[Texture2D] Generated ID: " + std::to_string(ID));
-    }
-
-    // Método no recomendado: carga síncrona de textura.
-    void Generate(const char *file, bool alpha)
-    {
-        Logger::Warning("[Texture2D] Use GenerateFromData instead");
-    }
-
-    /**
-     * @brief Genera la textura a partir de los datos de imagen proporcionados.
-     * @param img Datos de la imagen (ancho, alto, canales y puntero a los datos).
-     * @param alpha Indica si se espera que la imagen tenga canal alfa.
-     */
-    void GenerateFromData(const FileUtils::ImageData &img, bool alpha)
-    {
-        if (!img.data)
-        {
-            Logger::Error("[Texture2D] Image data is null");
-            return;
-        }
-        Width = img.width;
-        Height = img.height;
-        int desired_channels = alpha ? 4 : 3;
-        GLenum format = (desired_channels == 4) ? GL_RGBA : GL_RGB;
-
-        // Configuración de formatos y parámetros según si se usa alfa.
-        if (alpha)
-        {
-            Internal_Format = GL_SRGB_ALPHA;
-            Image_Format = GL_RGBA;
-            Wrap_S = GL_CLAMP_TO_EDGE;
-            Wrap_T = GL_CLAMP_TO_EDGE;
-        }
-        else
-        {
-            Internal_Format = GL_RGB;
-            Image_Format = GL_RGB;
-        }
-
-        GLCall(glBindTexture(GL_TEXTURE_2D, ID));
-        GLCall(glPixelStorei(GL_UNPACK_ALIGNMENT, 1));
-        GLCall(glTexImage2D(GL_TEXTURE_2D, 0, Internal_Format, Width, Height, 0, format, GL_UNSIGNED_BYTE, img.data));
-        GLCall(glGenerateMipmap(GL_TEXTURE_2D));
-        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, Wrap_S));
-        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, Wrap_T));
-        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, Filter_Min));
-        GLCall(glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, Filter_Mag));
-        GLCall(glBindTexture(GL_TEXTURE_2D, 0));
-
-        Logger::Info("[Texture2D] Texture generated (ID: " + std::to_string(ID) + ")");
-        stbi_image_free(img.data);
-    }
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\TransformComponent.h
-------------------------------------------------------------
-#pragma once
-#define GLM_ENABLE_EXPERIMENTAL
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtx/euler_angles.hpp>
-
-/**
- * @struct TransformComponent
- * @brief Componente de transformación para una entidad.
- *
- * Se utiliza la convención glTF:
- *   - Sistema de coordenadas right-handed, con Y up.
- *   - La transformación final se construye como: T * R * S.
- *
- * Esto significa que, para transformar un vértice \(v\):
- *    v' = T * R * S * v
- * se aplica primero la escala, luego la rotación y por último la traslación.
- */
-struct TransformComponent {
-    glm::vec3 translation = glm::vec3(0.0f);
-    glm::vec3 rotation = glm::vec3(0.0f);  // (pitch, yaw, roll) en grados.
-    glm::vec3 scale = glm::vec3(1.0f);
-    glm::mat4 transform = glm::mat4(1.0f);
-
-    // Actualiza la transformación final: T * R * S.
-    void UpdateTransform() {
-        glm::mat4 T = glm::translate(glm::mat4(1.0f), translation);
-        glm::mat4 R = glm::yawPitchRoll(glm::radians(rotation.y),
-                                        glm::radians(rotation.x),
-                                        glm::radians(rotation.z));
-        glm::mat4 S = glm::scale(glm::mat4(1.0f), scale);
-        transform = T * R * S;
-    }
-};
-
-------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\include\UniformBuffer.h
-------------------------------------------------------------
-#pragma once
-
-#include <glad/glad.h>
-#include "Logger.h"
+#include "utils/Logger.h"
 
 class UniformBuffer {
 public:
@@ -1796,10 +1800,10 @@ public:
 };
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Config.cpp
+Archivo: src\Config.cpp
 ------------------------------------------------------------
-#include "Config.h"
-#include "Logger.h"
+#include "engine/Config.h"
+#include "utils/Logger.h"
 #include <filesystem>
 
 Config Config::LoadFromFile(const std::string& configFilePath) {
@@ -1852,20 +1856,20 @@ Config Config::LoadFromFile(const std::string& configFilePath) {
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\EntityLoader.cpp
+Archivo: src\EntityLoader.cpp
 ------------------------------------------------------------
 /**
  * @file EntityLoader.cpp
  * @brief Implementation of the EntityLoader class that loads entities from a YAML file.
  */
 
-#include "EntityLoader.h"
+#include "core/EntityLoader.h"
 #include <yaml-cpp/yaml.h>
-#include "Logger.h"
-#include "TransformComponent.h"
-#include "RenderComponent.h"
-#include "ResourceManager.h"
-#include "Model.h"
+#include "utils/Logger.h"
+#include "components/TransformComponent.h"
+#include "components/RenderComponent.h"
+#include "renderer/ResourceManager.h"
+#include "renderer/Model.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>
@@ -1954,7 +1958,7 @@ void EntityLoader::LoadEntitiesFromYAML(Coordinator *coordinator, const std::str
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
+Archivo: src\Main.cpp
 ------------------------------------------------------------
 /**
  * @file Main.cpp
@@ -1975,22 +1979,22 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Main.cpp
 #include <iostream>
 #include <sstream>
 #include <cassert>
-#include "ResourceManager.h"
-#include "Config.h"
-#include "Logger.h"
+#include "renderer/ResourceManager.h"
+#include "engine/Config.h"
+#include "utils/Logger.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <filesystem>
-#include "Coordinator.h"
-#include "EntityLoader.h"
-#include "RenderSystem.h"
-#include "Shader.h"
-#include "Camera.h"
-#include "Light.h"
-#include "LightManager.h"
-#include "ECSPlayerController.h"
-#include "GLDebug.h"
+#include "core/Coordinator.h"
+#include "core/EntityLoader.h"
+#include "systems/RenderSystem.h"
+#include "renderer/Shader.h"
+#include "engine/Camera.h"
+#include "engine/Light.h"
+#include "engine/LightManager.h"
+#include "engine/ECSPlayerController.h"
+#include "utils/GLDebug.h"
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -2049,9 +2053,6 @@ int main()
         if (!glfwInit())
         {
             Logger::Error("Main: Failed to initialize GLFW.");
-#ifdef _DEBUG
-            _CrtDumpMemoryLeaks();
-#endif
             return -1;
         }
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -2064,9 +2065,6 @@ int main()
         {
             Logger::Error("Main: Failed to create GLFW window.");
             glfwTerminate();
-#ifdef _DEBUG
-            _CrtDumpMemoryLeaks();
-#endif
             return -1;
         }
         glfwMakeContextCurrent(window);
@@ -2076,9 +2074,6 @@ int main()
         if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
         {
             Logger::Error("Main: Failed to initialize GLAD.");
-#ifdef _DEBUG
-            _CrtDumpMemoryLeaks();
-#endif
             return -1;
         }
 
@@ -2202,18 +2197,12 @@ int main()
         Logger::Info("Main: Exiting main loop. Cleaning up resources.");
         ResourceManager::Clear();
         glfwTerminate();
-#ifdef _DEBUG
-        _CrtDumpMemoryLeaks();
-#endif
         return 0;
     }
     catch (const std::exception &e)
     {
         Logger::Error(std::string("[Main] Exception caught in main loop: ") + e.what());
         std::cerr << "Ocurrió un error inesperado. Por favor, revisa el log para más detalles." << std::endl;
-#ifdef _DEBUG
-        _CrtDumpMemoryLeaks();
-#endif
         glfwTerminate();
         return -1;
     }
@@ -2221,23 +2210,21 @@ int main()
     {
         Logger::Error("[Main] Unknown exception caught in main loop.");
         std::cerr << "Ocurrió un error desconocido. Por favor, revisa el log." << std::endl;
-#ifdef _DEBUG
-        _CrtDumpMemoryLeaks();
-#endif
         glfwTerminate();
         return -1;
     }
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.cpp
+Archivo: src\Model.cpp
 ------------------------------------------------------------
-#include "Model.h"
-#include "Submesh.h"
-#include "Material.h"
-#include "ResourceManager.h" // Si necesitas acceder a recursos para materiales
-#include "FileUtils.h"
-#include "Logger.h"
+// Model.cpp
+#include "renderer/Model.h"
+#include "renderer/Submesh.h"
+#include "renderer/Material.h"
+#include "renderer/ResourceManager.h" // Para acceder a recursos de materiales
+#include "utils/FileUtils.h"
+#include "utils/Logger.h"
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
@@ -2245,30 +2232,99 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\Model.cpp
 #include <filesystem>
 #include <glm/gtc/type_ptr.hpp>
 
-// Función para cargar un material a partir de un aiMaterial y la ruta base
+/**
+ * Carga el material de un mesh usando las propiedades glTF expuestas por Assimp.
+ * Se intentan cargar las texturas para:
+ *   - Albedo (usando BASE_COLOR o DIFFUSE). Si no existe, se extrae el factor "baseColorFactor".
+ *   - Normal (NORMALS)
+ *   - MetallicRoughness (UNKNOWN); de no existir, se leen "metallicFactor" y "roughnessFactor".
+ *   - Occlusion (AMBIENT)
+ *   - Emisivo (EMISSIVE)
+ * Se utilizan rutas resueltas de forma genérica.
+ */
 Material LoadMaterial(aiMaterial* material, const std::string &modelDir) {
     Material mat;
     aiString texPath;
-    if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texPath) == AI_SUCCESS) {
+    
+    // Albedo: buscar en BASE_COLOR o DIFFUSE
+    if (material->GetTexture(aiTextureType_BASE_COLOR, 0, &texPath) == AI_SUCCESS ||
+        material->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == AI_SUCCESS) {
         std::string texPathStr = texPath.C_Str();
         if (!texPathStr.empty() && texPathStr.front() == '/')
             texPathStr.erase(0, 1);
         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
-        Logger::Debug("[LoadMaterial] Loading texture from: " + fullTexPath);
+        Logger::Debug("[LoadMaterial] Loading base color texture from: " + fullTexPath);
         mat.albedo = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
     } else {
-        mat.baseColorFactor = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
+        aiColor4D baseColor;
+        if (AI_SUCCESS == aiGetMaterialColor(material, "gltf.pbrMetallicRoughness.baseColorFactor", 0, 0, &baseColor)) {
+            mat.baseColorFactor = glm::vec4(baseColor.r, baseColor.g, baseColor.b, baseColor.a);
+            Logger::Debug("[LoadMaterial] Using baseColorFactor: " +
+                          std::to_string(mat.baseColorFactor.r) + ", " +
+                          std::to_string(mat.baseColorFactor.g) + ", " +
+                          std::to_string(mat.baseColorFactor.b) + ", " +
+                          std::to_string(mat.baseColorFactor.a));
+        }
     }
+    
+    // Normal map
+    if (material->GetTexture(aiTextureType_NORMALS, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading normal texture from: " + fullTexPath);
+         mat.normal = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
+    }
+    
+    // MetallicRoughness map
+    if (material->GetTexture(aiTextureType_UNKNOWN, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading metallicRoughness texture from: " + fullTexPath);
+         mat.metallicRoughness = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
+    } else {
+         float metallic = 1.0f, roughness = 1.0f;
+         if (AI_SUCCESS == aiGetMaterialFloat(material, "gltf.pbrMetallicRoughness.metallicFactor", 0, 0, &metallic)) {
+             mat.metallicFactor = metallic;
+             Logger::Debug("[LoadMaterial] Metallic factor: " + std::to_string(metallic));
+         }
+         if (AI_SUCCESS == aiGetMaterialFloat(material, "gltf.pbrMetallicRoughness.roughnessFactor", 0, 0, &roughness)) {
+             mat.roughnessFactor = roughness;
+             Logger::Debug("[LoadMaterial] Roughness factor: " + std::to_string(roughness));
+         }
+    }
+    
+    // Occlusion map (usualmente en AMBIENT)
+    if (material->GetTexture(aiTextureType_AMBIENT, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading occlusion texture from: " + fullTexPath);
+         mat.occlusion = ResourceManager::LoadTexture(fullTexPath.c_str(), false, fullTexPath);
+    }
+    
+    // Emissive map
+    if (material->GetTexture(aiTextureType_EMISSIVE, 0, &texPath) == AI_SUCCESS) {
+         std::string texPathStr = texPath.C_Str();
+         if (!texPathStr.empty() && texPathStr.front() == '/')
+             texPathStr.erase(0, 1);
+         std::string fullTexPath = FileUtils::ResolvePath(modelDir, texPathStr);
+         Logger::Debug("[LoadMaterial] Loading emissive texture from: " + fullTexPath);
+         mat.emissive = ResourceManager::LoadTexture(fullTexPath.c_str(), true, fullTexPath);
+    }
+    
     return mat;
 }
 
-// Constructor: llama a loadModel
 Model::Model(const std::string &path) {
     Logger::Info("[Model] Loading from: " + path);
     loadModel(path);
 }
 
-// Recorre la jerarquía de nodos y procesa cada malla
 void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& parentTransform, const std::string &modelDir) {
     glm::mat4 nodeTransform = parentTransform * aiMatrix4x4ToGlm(node->mTransformation);
     
@@ -2277,6 +2333,10 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
         Submesh submesh;
         Logger::Info("[Model::processNode] Processing mesh from node: " + std::string(node->mName.C_Str()) +
                      ", vertices: " + std::to_string(mesh->mNumVertices));
+        
+        // Reservar espacio para evitar realineaciones
+        submesh.vertices.reserve(mesh->mNumVertices);
+        submesh.indices.reserve(mesh->mNumFaces * 3);
         
         glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(nodeTransform)));
         
@@ -2297,11 +2357,18 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
                 vertex.Normal = glm::vec3(0.0f);
             }
             
-            if (mesh->HasTextureCoords(0))
+            if (mesh->HasTextureCoords(0)) {
                 vertex.TexCoords = glm::vec2(mesh->mTextureCoords[0][j].x,
                                              mesh->mTextureCoords[0][j].y);
-            else
+            } else {
                 vertex.TexCoords = glm::vec2(0.0f);
+            }
+            if (mesh->HasTextureCoords(1)) {
+                vertex.TexCoords2 = glm::vec2(mesh->mTextureCoords[1][j].x,
+                                              mesh->mTextureCoords[1][j].y);
+            } else {
+                vertex.TexCoords2 = glm::vec2(0.0f);
+            }
             
             if (mesh->HasTangentsAndBitangents()) {
                 glm::vec3 tan(mesh->mTangents[j].x,
@@ -2336,7 +2403,6 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
     }
 }
 
-// Carga el modelo usando Assimp y procesa la jerarquía de nodos.
 void Model::loadModel(const std::string &path) {
     Logger::Info("[Model::loadModel] Starting load: " + path);
     
@@ -2356,7 +2422,6 @@ void Model::loadModel(const std::string &path) {
     processNode(scene->mRootNode, scene, glm::mat4(1.0f), modelDir);
 }
 
-// Dibuja cada submesh
 void Model::Draw() {
     for (auto &submesh : submeshes) {
         if (submesh.VAO != 0)
@@ -2365,19 +2430,14 @@ void Model::Draw() {
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ModelLoader.cpp
+Archivo: src\ModelLoader.cpp
 ------------------------------------------------------------
-/**
- * @file ModelLoader.cpp
- * @brief Implementation of functions to process Assimp model nodes and convert data for rendering.
- */
-
-#include "ModelLoader.h"
+#include "core/ModelLoader.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <algorithm>
 #include <string>
-#include "Logger.h"
+#include "utils/Logger.h"
 
 void processNode(aiNode *node, const aiScene *scene,
                  std::vector<Vertex> &vertices,
@@ -2386,7 +2446,7 @@ void processNode(aiNode *node, const aiScene *scene,
 {
     Logger::Debug("[ModelLoader] Processing node: " + std::string(node->mName.C_Str()));
     glm::mat4 nodeTransform = parentTransform;
-    // Uncomment the following line to apply the node's transformation:
+    // Si se requiere aplicar la transformación del nodo, descomenta la siguiente línea:
     // nodeTransform = parentTransform * aiMatrix4x4ToGlm(node->mTransformation);
 
     for (unsigned int i = 0; i < node->mNumMeshes; i++)
@@ -2408,6 +2468,12 @@ void processNode(aiNode *node, const aiScene *scene,
             vertex.TexCoords = mesh->HasTextureCoords(0)
                                    ? glm::vec2(mesh->mTextureCoords[0][j].x, mesh->mTextureCoords[0][j].y)
                                    : glm::vec2(0.0f);
+            // Soporte para segundo set de UV
+            if (mesh->HasTextureCoords(1))
+                vertex.TexCoords2 = glm::vec2(mesh->mTextureCoords[1][j].x, mesh->mTextureCoords[1][j].y);
+            else
+                vertex.TexCoords2 = glm::vec2(0.0f);
+            
             vertex.Tangent = mesh->HasTangentsAndBitangents()
                                  ? glm::normalize(glm::vec3(mesh->mTangents[j].x, mesh->mTangents[j].y, mesh->mTangents[j].z))
                                  : glm::vec3(0.0f);
@@ -2425,7 +2491,7 @@ void processNode(aiNode *node, const aiScene *scene,
         Logger::Debug("[ModelLoader] Mesh " + std::to_string(i) +
                       " processed (" + std::to_string(mesh->mNumFaces) + " faces)");
 
-        // Manually calculate tangents if missing
+        // Calcular tangentes manualmente si faltan
         if (!mesh->HasTangentsAndBitangents() && mesh->HasTextureCoords(0))
         {
             std::vector<glm::vec3> tempTangents(mesh->mNumVertices, glm::vec3(0.0f));
@@ -2467,14 +2533,72 @@ void processNode(aiNode *node, const aiScene *scene,
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\ResourceManager.cpp
+Archivo: src\RenderSystem.cpp
 ------------------------------------------------------------
-#include "ResourceManager.h"
-#include "FileUtils.h"
-#include "Logger.h"
+// RenderSystem.cpp
+#include "systems/RenderSystem.h"
+#include "core/Coordinator.h"
+#include "components/TransformComponent.h"
+#include "components/RenderComponent.h"
+#include "renderer/Shader.h"
+#include "engine/Camera.h"
+#include "utils/GLDebug.h"
+#include "utils/Logger.h"
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm.hpp>
+
+void RenderSystem::Init(Coordinator* coordinator, Shader* shader, Camera* camera) {
+    mCoordinator = coordinator;
+    mShader = shader;
+    mCamera = camera;
+    // Cachear la ubicación de la uniform "model"
+    mModelLoc = glGetUniformLocation(mShader->ID, "model");
+}
+
+void RenderSystem::Update(float dt) {
+    if (!mCoordinator || !mShader || !mCamera) return;
+
+    glm::vec3 camPos = mCamera->Position;
+
+    // Recoger entidades y ordenarlas por el puntero al Model para agrupar draw calls
+    std::vector<std::pair<Model*, ECS::Entity>> sortedEntities;
+    for (auto entity : mEntities) {
+        auto& render = mCoordinator->GetComponent<RenderComponent>(entity);
+        if (render.model) {
+            sortedEntities.push_back({ render.model.get(), entity });
+        }
+    }
+    std::sort(sortedEntities.begin(), sortedEntities.end(),
+        [](const std::pair<Model*, ECS::Entity>& a, const std::pair<Model*, ECS::Entity>& b) {
+            return a.first < b.first;
+        }
+    );
+
+    // Renderizar entidades ordenadas con culling simple (omitiendo aquellas muy lejanas)
+    for (const auto& pair : sortedEntities) {
+        ECS::Entity entity = pair.second;
+        auto& transform = mCoordinator->GetComponent<TransformComponent>(entity);
+        if (glm::distance(transform.translation, camPos) > 100.0f)
+            continue;
+        transform.UpdateTransform();
+        GLCall(glUniformMatrix4fv(mModelLoc, 1, GL_FALSE, glm::value_ptr(transform.transform)));
+        auto& render = mCoordinator->GetComponent<RenderComponent>(entity);
+        if (render.model)
+            render.model->Draw();
+    }
+}
+
+------------------------------------------------------------
+Archivo: src\ResourceManager.cpp
+------------------------------------------------------------
+// ResourceManager.cpp
+#include "renderer/ResourceManager.h"
+#include "utils/FileUtils.h"
+#include "utils/Logger.h"
 #include <filesystem>
-#include "GLDebug.h"
+#include "utils/GLDebug.h"
 #include <cassert>
+#include <future>
 
 Config ResourceManager::m_Config;
 std::map<std::string, std::shared_ptr<Shader>> ResourceManager::Shaders;
@@ -2515,13 +2639,10 @@ std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::strin
 {
     try
     {
-        std::string vertexShaderFile = m_Config.vertexShader; // Ejemplo: "pbr_vertex.glsl"
-        std::string fragmentShaderFile = fragmentShaderName;  // Ejemplo: "pbr_fragment.glsl"
-
-        // Resolver rutas usando la configuración global.
+        std::string vertexShaderFile = m_Config.vertexShader;
+        std::string fragmentShaderFile = fragmentShaderName;
         vertexShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, vertexShaderFile);
         fragmentShaderFile = FileUtils::ResolvePath(m_Config.projectRoot + m_Config.shaders, fragmentShaderFile);
-
         return LoadShader(vertexShaderFile.c_str(), fragmentShaderFile.c_str(), key);
     }
     catch (const std::exception &e)
@@ -2555,20 +2676,18 @@ std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool a
             }
         }
 
-        Logger::Debug("[ResourceManager] Cargando imagen desde: " + filePath);
+        Logger::Debug("[ResourceManager] Loading image from: " + filePath);
 
         auto texture = std::make_shared<Texture2D>();
 
-        // Forzar el número de canales según 'alpha'
         int width, height, nrChannels;
         unsigned char *data = stbi_load(filePath.c_str(), &width, &height, &nrChannels, alpha ? 4 : 3);
-        // Assertion para asegurarse de que se cargó la imagen.
-        assert(data && "Error: Los datos de la imagen son nulos tras stbi_load.");
+        assert(data && "Error: Image data is null after stbi_load.");
         if (data)
         {
-            Logger::Debug("[ResourceManager] Imagen cargada: " + filePath +
+            Logger::Debug("[ResourceManager] Image loaded: " + filePath +
                           " (" + std::to_string(width) + "x" + std::to_string(height) +
-                          ", canales: " + std::to_string(nrChannels) + ")");
+                          ", channels: " + std::to_string(nrChannels) + ")");
             FileUtils::ImageData imgData;
             imgData.data = data;
             imgData.width = width;
@@ -2615,23 +2734,33 @@ std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string 
     }
 }
 
-std::shared_ptr<Shader> ResourceManager::GetShader(const std::string &name)
-{
+// Funciones asíncronas
+
+std::future<std::shared_ptr<Texture2D>> ResourceManager::LoadTextureAsync(const char *file, bool alpha, std::string name) {
+    return std::async(std::launch::async, [file, alpha, name]() {
+        return LoadTexture(file, alpha, name);
+    });
+}
+
+std::future<std::shared_ptr<Model>> ResourceManager::LoadModelAsync(const char *file, std::string name) {
+    return std::async(std::launch::async, [file, name]() {
+        return LoadModel(file, name);
+    });
+}
+
+std::shared_ptr<Shader> ResourceManager::GetShader(const std::string &name) {
     return Shaders[name];
 }
 
-std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string &name)
-{
+std::shared_ptr<Texture2D> ResourceManager::GetTexture(const std::string &name) {
     return Textures[name];
 }
 
-std::shared_ptr<Model> ResourceManager::GetModel(const std::string &name)
-{
+std::shared_ptr<Model> ResourceManager::GetModel(const std::string &name) {
     return Models[name];
 }
 
-void ResourceManager::Clear()
-{
+void ResourceManager::Clear() {
     Logger::Info("[ResourceManager] Clearing all resources.");
     for (auto &iter : Shaders)
         GLCall(glDeleteProgram(iter.second->ID));
@@ -2643,7 +2772,7 @@ void ResourceManager::Clear()
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\stb_image.cpp
+Archivo: src\stb_image.cpp
 ------------------------------------------------------------
 // stb_image.cpp
 // This file implements the stb_image functions by defining the implementation macro.
@@ -2653,7 +2782,7 @@ Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\src\stb_image.cpp
 #include "stb_image.h"
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\pbr_fragment.glsl
+Archivo: shaders\pbr_fragment.glsl
 ------------------------------------------------------------
 #version 330 core
 
@@ -2716,8 +2845,8 @@ void main() {
     float roughness = useMaps ? texture(metallicRoughnessMap, TexCoords).g : 1.0;
     vec3 tangentNormal = useMaps ? texture(normalMap, TexCoords).rgb : vec3(0.5, 0.5, 1.0);
     tangentNormal = tangentNormal * 2.0 - 1.0;
-    // Invertir el canal verde si es necesario.
-    tangentNormal.y = -tangentNormal.y;
+    // Para modelos glTF no se invierte el canal verde:
+    // tangentNormal.y = -tangentNormal.y;
     vec3 N = normalize(TBN * tangentNormal);
     
     vec3 F0 = mix(vec3(0.04), albedoColor, metallic);
@@ -2760,13 +2889,14 @@ void main() {
 }
 
 ------------------------------------------------------------
-Archivo: C:\Users\Alberto\Desktop\Proyecto_Tox\shaders\pbr_vertex.glsl
+Archivo: shaders\pbr_vertex.glsl
 ------------------------------------------------------------
 #version 330 core
 layout (location = 0) in vec3 aPos;
 layout (location = 1) in vec3 aNormal;
 layout (location = 2) in vec2 aTexCoords;
 layout (location = 3) in vec3 aTangent;
+layout (location = 4) in vec2 aTexCoords2; // Segundo conjunto de UV
 
 uniform mat4 model;
 uniform mat4 view;
@@ -2774,6 +2904,7 @@ uniform mat4 projection;
 
 out vec3 FragPos;
 out vec2 TexCoords;
+out vec2 TexCoords2; // Se pasa el segundo conjunto de UV
 out mat3 TBN;
 
 void main()
@@ -2781,6 +2912,7 @@ void main()
     vec4 worldPos = model * vec4(aPos, 1.0);
     FragPos = worldPos.xyz;
     TexCoords = aTexCoords;
+    TexCoords2 = aTexCoords2;
     
     mat3 normalMatrix = transpose(inverse(mat3(model)));
     vec3 N = normalize(normalMatrix * aNormal);

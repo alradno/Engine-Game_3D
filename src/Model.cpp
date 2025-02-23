@@ -1,10 +1,10 @@
 // Model.cpp
-#include "Model.h"
-#include "Submesh.h"
-#include "Material.h"
-#include "ResourceManager.h" // Para acceder a recursos de materiales
-#include "FileUtils.h"
-#include "Logger.h"
+#include "renderer/Model.h"
+#include "renderer/Submesh.h"
+#include "renderer/Material.h"
+#include "renderer/ResourceManager.h" // Para acceder a recursos de materiales
+#include "utils/FileUtils.h"
+#include "utils/Logger.h"
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>

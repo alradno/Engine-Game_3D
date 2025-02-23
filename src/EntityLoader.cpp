@@ -3,13 +3,13 @@
  * @brief Implementation of the EntityLoader class that loads entities from a YAML file.
  */
 
-#include "EntityLoader.h"
+#include "core/EntityLoader.h"
 #include <yaml-cpp/yaml.h>
-#include "Logger.h"
-#include "TransformComponent.h"
-#include "RenderComponent.h"
-#include "ResourceManager.h"
-#include "Model.h"
+#include "utils/Logger.h"
+#include "components/TransformComponent.h"
+#include "components/RenderComponent.h"
+#include "renderer/ResourceManager.h"
+#include "renderer/Model.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <vector>

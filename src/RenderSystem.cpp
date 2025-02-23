@@ -1,12 +1,12 @@
 // RenderSystem.cpp
-#include "RenderSystem.h"
-#include "Coordinator.h"
-#include "TransformComponent.h"
-#include "RenderComponent.h"
-#include "Shader.h"
-#include "Camera.h"
-#include "GLDebug.h"
-#include "Logger.h"
+#include "systems/RenderSystem.h"
+#include "core/Coordinator.h"
+#include "components/TransformComponent.h"
+#include "components/RenderComponent.h"
+#include "renderer/Shader.h"
+#include "engine/Camera.h"
+#include "utils/GLDebug.h"
+#include "utils/Logger.h"
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/glm.hpp>
 

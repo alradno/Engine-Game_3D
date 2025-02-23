@@ -22,13 +22,16 @@ foreach ($folder in $folders) {
         continue
     }
     
-    # Obtenemos todos los archivos (excluyendo directorios) de la carpeta
-    Get-ChildItem -Path $folderPath -File | ForEach-Object {
+    # Obtenemos todos los archivos (excluyendo directorios) de la carpeta y sus subcarpetas de forma recursiva
+    Get-ChildItem -Path $folderPath -Recurse -File | ForEach-Object {
         $file = $_
-        
+
+        # Calculamos la ruta relativa del archivo con respecto al directorio del script
+        $relativePath = $file.FullName.Substring($scriptDir.Length + 1)
+
         # Creamos un encabezado identificador para el contenido de cada archivo
         $separator = "-" * 60
-        $header = "$separator`nArchivo: $($file.FullName)`n$separator"
+        $header = "$separator`nArchivo: $relativePath`n$separator"
         
         # Escribimos el encabezado en el archivo de salida
         Add-Content -Path $outputFile -Value $header

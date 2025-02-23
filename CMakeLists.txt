@@ -34,14 +34,16 @@ target_include_directories(Toxic PRIVATE
     ${CMAKE_SOURCE_DIR}/libs/glm/include
     ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/libs/yaml/include
-    ${CMAKE_SOURCE_DIR}/libs/tinygltf/include
+    ${CMAKE_SOURCE_DIR}/libs/freetype/
+    ${CMAKE_SOURCE_DIR}/libs/freetype/include
 )
 
 # Link the necessary libraries for Toxic.
 target_link_libraries(Toxic PRIVATE
-    ${CMAKE_SOURCE_DIR}/libs/assimp/lib/assimp-vc143-mt.lib
     opengl32
     gdi32
+    ${CMAKE_SOURCE_DIR}/libs/assimp/lib/assimp-vc143-mt.lib
+    ${CMAKE_SOURCE_DIR}/libs/freetype/lib/freetype.lib
     ${CMAKE_SOURCE_DIR}/libs/glfw/lib/glfw3.lib
     ${CMAKE_SOURCE_DIR}/libs/glm/lib/glm.lib
     $<$<CONFIG:Debug>:${CMAKE_SOURCE_DIR}/libs/yamldebug/lib/yaml-cppd.lib>
@@ -57,6 +59,10 @@ if(WIN32)
             ${CMAKE_SOURCE_DIR}/libs/assimp/bin/assimp-vc143-mt.dll
             $<TARGET_FILE_DIR:Toxic>
         COMMENT "Copying Assimp DLL to the executable directory"
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            ${CMAKE_SOURCE_DIR}/libs/freetype/bin/freetype.dll
+            $<TARGET_FILE_DIR:Toxic>
+        COMMENT "Copying FreeType DLL to the executable directory"
     )
 endif()
 

@@ -1,9 +1,9 @@
 // ResourceManager.cpp
-#include "ResourceManager.h"
-#include "FileUtils.h"
-#include "Logger.h"
+#include "renderer/ResourceManager.h"
+#include "utils/FileUtils.h"
+#include "utils/Logger.h"
 #include <filesystem>
-#include "GLDebug.h"
+#include "utils/GLDebug.h"
 #include <cassert>
 #include <future>
 

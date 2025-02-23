@@ -1,9 +1,9 @@
-#include "ModelLoader.h"
+#include "core/ModelLoader.h"
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 #include <algorithm>
 #include <string>
-#include "Logger.h"
+#include "utils/Logger.h"
 
 void processNode(aiNode *node, const aiScene *scene,
                  std::vector<Vertex> &vertices,
