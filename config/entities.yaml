@@ -1,5 +1,6 @@
 # entities.yaml - Definición de entidades
 entities:
+
   - transform:
       translation: [0.0, 0.0, 0.0]
       rotation: [0.0, 0.0, 0.0]
@@ -7,22 +8,6 @@ entities:
     render:
       model: "car/scene.gltf"
       shader: "pbr_fragment.glsl"
-
-  # - transform:
-  #     translation: [0.0, 0.0, 0.0]
-  #     rotation: [0.0, 0.0, 0.0]
-  #     scale: [3.0, 3.0, 3.0]
-  #   render:
-  #     model: "porsche/scene.gltf"
-  #     shader: "pbr_fragment.glsl"
-
-  # - transform:
-  #     translation: [0.0, 0.0, 0.0]
-  #     rotation: [0.0, 0.0, 0.0]
-  #     scale: [1.0, 1.0, 1.0]
-  #   render:
-  #     model: "destroyed_car/scene.gltf"
-  #     shader: "pbr_fragment.glsl"
 
   # - transform:
   #     translation: [0.0, 0.0, 0.0]
@@ -37,15 +22,7 @@ entities:
   #     rotation: [0.0, 0.0, 0.0]
   #     scale: [1.0, 1.0, 1.0]
   #   render:
-  #     model: "ship_in_bottle/scene.gltf"
-  #     shader: "pbr_fragment.glsl"
-
-  # - transform:
-  #     translation: [0.0, 0.0, 0.0]
-  #     rotation: [0.0, 0.0, 0.0]
-  #     scale: [100.0, 100.0, 100.0]
-  #   render:
-  #     model: "mickey/Mickey_Mouse.obj"
+  #     model: "scenary/scene.gltf"
   #     shader: "pbr_fragment.glsl"
 
   # - transform:
