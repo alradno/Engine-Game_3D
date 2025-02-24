@@ -20,10 +20,13 @@ void RenderSystem::Init(Coordinator* coordinator, Shader* shader, Camera* camera
 
 void RenderSystem::Update(float dt) {
     if (!mCoordinator || !mShader || !mCamera) return;
-
+    
+    // Asegurarse de que el shader esté activo.
+    mShader->Use();
+    
     glm::vec3 camPos = mCamera->Position;
 
-    // Recoger entidades y ordenarlas por el puntero al Model para agrupar draw calls
+    // Recoger entidades y ordenarlas (código de ejemplo)
     std::vector<std::pair<Model*, ECS::Entity>> sortedEntities;
     for (auto entity : mEntities) {
         auto& render = mCoordinator->GetComponent<RenderComponent>(entity);
@@ -37,12 +40,10 @@ void RenderSystem::Update(float dt) {
         }
     );
 
-    // Renderizar entidades ordenadas con culling simple (omitiendo aquellas muy lejanas)
+    // Renderizar entidades (suponiendo culling, etc.)
     for (const auto& pair : sortedEntities) {
         ECS::Entity entity = pair.second;
         auto& transform = mCoordinator->GetComponent<TransformComponent>(entity);
-        if (glm::distance(transform.translation, camPos) > 100.0f)
-            continue;
         transform.UpdateTransform();
         GLCall(glUniformMatrix4fv(mModelLoc, 1, GL_FALSE, glm::value_ptr(transform.transform)));
         auto& render = mCoordinator->GetComponent<RenderComponent>(entity);

@@ -12,6 +12,18 @@
       "environment": [],
       "console": "internalConsole",
       "preLaunchTask": "CMake: build"
+    },
+    {
+      "name": "SceneSwitchingTest",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/build/test/Release/SceneSwitchingTest.exe",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "internalConsole",
+      "preLaunchTask": "CMake: build"
     }
   ]
 }

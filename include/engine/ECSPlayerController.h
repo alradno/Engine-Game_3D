@@ -62,7 +62,7 @@ public:
             turnInput = -turnInput;
         // Se usa ThresholdLog para valores numéricos que varían con cada frame.
         Logger::ThresholdLog<float>("ECSPlayerController_turnInput", turnInput, 0.01f, LogLevel::DEBUG,
-            "[ECSPlayerController] turnInput = " + std::to_string(turnInput), 0.5);
+            "[ECSPlayerController] turnInput = " + std::to_string(turnInput), 5.0);
         
         // Calculamos aceleración angular
         float angularAcceleration = turnInput * m_MaxAngularSpeed;
@@ -73,17 +73,17 @@ public:
         if (m_AngularVelocity < -m_MaxAngularSpeed)
             m_AngularVelocity = -m_MaxAngularSpeed;
         Logger::ThresholdLog<float>("ECSPlayerController_AngularVelocity", m_AngularVelocity, 0.01f, LogLevel::DEBUG,
-            "[ECSPlayerController] Angular velocity = " + std::to_string(m_AngularVelocity), 0.5);
+            "[ECSPlayerController] Angular velocity = " + std::to_string(m_AngularVelocity), 5.0);
         
         // Integración de la velocidad angular
         m_DynamicYaw += m_AngularVelocity * dt;
         m_DynamicYaw = fmod(m_DynamicYaw, 360.0f);
         Logger::ThresholdLog<float>("ECSPlayerController_dynamicYaw", m_DynamicYaw, 0.01f, LogLevel::DEBUG,
-            "[ECSPlayerController] dynamicYaw = " + std::to_string(m_DynamicYaw), 0.5);
+            "[ECSPlayerController] dynamicYaw = " + std::to_string(m_DynamicYaw), 5.0);
         
         float effectiveYaw = m_BaseYawOffset + m_DynamicYaw;
         Logger::ThresholdLog<float>("ECSPlayerController_effectiveYaw", effectiveYaw, 0.01f, LogLevel::DEBUG,
-            "[ECSPlayerController] effectiveYaw = " + std::to_string(effectiveYaw), 0.5);
+            "[ECSPlayerController] effectiveYaw = " + std::to_string(effectiveYaw), 5.0);
         transform.rotation.y = effectiveYaw;
         
         // --- Cálculo del vector forward ---
@@ -97,7 +97,7 @@ public:
             "[ECSPlayerController] forward vector = (" +
             std::to_string(forward.x) + ", " +
             std::to_string(forward.y) + ", " +
-            std::to_string(forward.z) + ")", 0.5);
+            std::to_string(forward.z) + ")", 5.0);
         
         // --- Procesamiento del movimiento ---
         float moveInput = 0.0f;
@@ -106,21 +106,21 @@ public:
         if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
             moveInput -= 1.0f;
         Logger::ThrottledLog("ECSPlayerController_moveInput", LogLevel::DEBUG,
-            "[ECSPlayerController] moveInput = " + std::to_string(moveInput), 0.5);
+            "[ECSPlayerController] moveInput = " + std::to_string(moveInput), 5.0);
         
         Logger::ThrottledLog("ECSPlayerController_translationAntes", LogLevel::DEBUG,
             "[ECSPlayerController] translation antes = (" +
             std::to_string(transform.translation.x) + ", " +
             std::to_string(transform.translation.y) + ", " +
-            std::to_string(transform.translation.z) + ")", 0.5);
+            std::to_string(transform.translation.z) + ")", 5.0);
         
         transform.translation += forward * moveInput * m_MoveSpeed * dt;
         
         Logger::ThrottledLog("ECSPlayerController_translationDespues", LogLevel::DEBUG,
-            "[ECSPlayerController] translation después = (" +
+            "[ECSPlayerController] translation despues = (" +
             std::to_string(transform.translation.x) + ", " +
             std::to_string(transform.translation.y) + ", " +
-            std::to_string(transform.translation.z) + ")", 0.5);
+            std::to_string(transform.translation.z) + ")", 5.0);
         
         transform.UpdateTransform();
     }

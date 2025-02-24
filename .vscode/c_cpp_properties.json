@@ -5,13 +5,10 @@
       "includePath": [
         "${workspaceFolder}/src/**",
         "${workspaceFolder}/libs/**",
-        "${workspaceFolder}/include/**",
-        "${workspaceFolder}/libs/yaml/include",
-        "${workspaceFolder}/libs/glad/include",
-        "${workspaceFolder}/libs/freetype/**"
+        "${workspaceFolder}/include/**"
       ],
       "defines": [
-        "_DEBUG",
+        "_DEBUG", 
         "UNICODE",
         "_UNICODE"
       ],

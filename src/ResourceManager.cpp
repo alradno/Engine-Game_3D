@@ -1,4 +1,3 @@
-// ResourceManager.cpp
 #include "renderer/ResourceManager.h"
 #include "utils/FileUtils.h"
 #include "utils/Logger.h"
@@ -7,6 +6,7 @@
 #include <cassert>
 #include <future>
 
+// Definición de variables estáticas
 Config ResourceManager::m_Config;
 std::map<std::string, std::shared_ptr<Shader>> ResourceManager::Shaders;
 std::map<std::string, std::shared_ptr<Texture2D>> ResourceManager::Textures;
@@ -14,6 +14,11 @@ std::map<std::string, std::shared_ptr<Model>> ResourceManager::Models;
 
 std::shared_ptr<Shader> ResourceManager::LoadShader(const char *vShaderFile, const char *fShaderFile, std::string name)
 {
+    // Si ya está cargado, lo devolvemos
+    auto it = Shaders.find(name);
+    if (it != Shaders.end())
+        return it->second;
+
     try
     {
         std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
@@ -61,6 +66,11 @@ std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::strin
 
 std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool alpha, std::string name)
 {
+    // Si ya está cargada, la devolvemos
+    auto it = Textures.find(name);
+    if (it != Textures.end())
+        return it->second;
+
     try
     {
         std::string filePath = FileUtils::NormalizePath(file);
@@ -121,6 +131,11 @@ std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool a
 
 std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string name)
 {
+    // Si ya está cargado, lo devolvemos
+    auto it = Models.find(name);
+    if (it != Models.end())
+        return it->second;
+
     try
     {
         std::string filePath = FileUtils::NormalizePath(file);
@@ -140,8 +155,6 @@ std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string 
         return nullptr;
     }
 }
-
-// Funciones asíncronas
 
 std::future<std::shared_ptr<Texture2D>> ResourceManager::LoadTextureAsync(const char *file, bool alpha, std::string name) {
     return std::async(std::launch::async, [file, alpha, name]() {

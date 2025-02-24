@@ -1,0 +1,34 @@
+# entities.yaml - Definición de entidades
+entities:
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [0.02, 0.02, 0.02]
+  #   render:
+  #     model: "car/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  - transform:
+      translation: [0.0, 0.0, 0.0]
+      rotation: [0.0, 0.0, 0.0]
+      scale: [60.0, 60.0, 60.0]
+    render:
+      model: "train/scene.gltf"
+      shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [1.0, 1.0, 1.0]
+  #   render:
+  #     model: "scenary/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [3.0, 3.0, 3.0]
+  #   render:
+  #     model: "bee/79342.fbx"
+  #     shader: "pbr_fragment.glsl"

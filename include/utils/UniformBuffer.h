@@ -10,7 +10,7 @@ public:
     UniformBuffer() {
         glGenBuffers(1, &ID);
         Logger::ThrottledLog("UniformBuffer_Generated", LogLevel::DEBUG, 
-                             "[UniformBuffer] Generated ID: " + std::to_string(ID), 0.5);
+                             "[UniformBuffer] Generated ID: " + std::to_string(ID), 5.0);
     }
     
     void Bind() {
@@ -31,6 +31,6 @@ public:
     void BindToPoint(GLuint bindingPoint) {
         glBindBufferBase(GL_UNIFORM_BUFFER, bindingPoint, ID);
         Logger::ThrottledLog("UniformBuffer_BindToPoint", LogLevel::DEBUG, 
-                             "[UniformBuffer] Bound to point " + std::to_string(bindingPoint), 0.5);
+                             "[UniformBuffer] Bound to point " + std::to_string(bindingPoint), 5.0);
     }
 };

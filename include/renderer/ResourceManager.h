@@ -27,6 +27,8 @@ public:
     static std::shared_ptr<Texture2D> GetTexture(const std::string& name);
     static std::shared_ptr<Model> GetModel(const std::string& name);
 
+    static const Config& GetConfig() { return m_Config; }
+
     static void Clear();
 
 private:

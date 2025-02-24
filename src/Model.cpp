@@ -186,16 +186,43 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
 void Model::loadModel(const std::string &path) {
     Logger::Info("[Model::loadModel] Starting load: " + path);
     
+    // Guarda la ruta original tal como se recibe.
+    std::string originalPath = path;
+    
+    // Normaliza la ruta.
+    std::string filePath = FileUtils::NormalizePath(path);
+    std::filesystem::path p(filePath);
+    std::string expectedPath = filePath;
+    
+    // Obtén la configuración global a través del ResourceManager.
+    const Config& config = ResourceManager::GetConfig();
+    Logger::Debug("[Model::loadModel] Config.projectRoot: " + config.projectRoot +
+                  ", config.assets: " + config.assets);
+    
+    // Construir el prefijo esperado.
+    std::string prefix = config.projectRoot + config.assets; // Ejemplo: "./assets"
+    
+    // Si la ruta no es absoluta y no empieza ya por el prefijo, resolver la ruta.
+    if (!p.is_absolute() && filePath.rfind(prefix, 0) != 0) {
+        expectedPath = FileUtils::ResolvePath(prefix, filePath);
+        filePath = expectedPath;
+    }
+    
+    Logger::Info("[Model::loadModel] Attempting to load model from: " + filePath);
+    
     Assimp::Importer importer;
-    const aiScene *scene = importer.ReadFile(path,
+    const aiScene *scene = importer.ReadFile(filePath,
         aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
     
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-        Logger::Error("[Model::loadModel] Failed to load file: " + path + "\nReason: " + importer.GetErrorString());
+        Logger::Error("[Model::loadModel] Failed to load file: " + originalPath + "\n"
+                      "Attempted path: " + filePath + "\n"
+                      "Expected path: " + expectedPath + "\n"
+                      "Reason: " + importer.GetErrorString());
         return;
     }
     
-    std::filesystem::path modelFilePath(path);
+    std::filesystem::path modelFilePath(filePath);
     std::string modelDir = modelFilePath.parent_path().generic_string();
     Logger::Info("[Model::loadModel] Base directory: " + modelDir);
     

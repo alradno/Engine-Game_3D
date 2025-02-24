@@ -19,6 +19,82 @@ lights:
     color: [1.0, 1.0, 1.0]
 
 ------------------------------------------------------------
+Archivo: config\entities_scene1.yaml
+------------------------------------------------------------
+# entities.yaml - Definición de entidades
+entities:
+
+  - transform:
+      translation: [0.0, 0.0, 0.0]
+      rotation: [0.0, 0.0, 0.0]
+      scale: [0.02, 0.02, 0.02]
+    render:
+      model: "car/scene.gltf"
+      shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [60.0, 60.0, 60.0]
+  #   render:
+  #     model: "train/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [1.0, 1.0, 1.0]
+  #   render:
+  #     model: "scenary/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [3.0, 3.0, 3.0]
+  #   render:
+  #     model: "bee/79342.fbx"
+  #     shader: "pbr_fragment.glsl"
+
+------------------------------------------------------------
+Archivo: config\entities_scene2.yaml
+------------------------------------------------------------
+# entities.yaml - Definición de entidades
+entities:
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [0.02, 0.02, 0.02]
+  #   render:
+  #     model: "car/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  - transform:
+      translation: [0.0, 0.0, 0.0]
+      rotation: [0.0, 0.0, 0.0]
+      scale: [60.0, 60.0, 60.0]
+    render:
+      model: "train/scene.gltf"
+      shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [1.0, 1.0, 1.0]
+  #   render:
+  #     model: "scenary/scene.gltf"
+  #     shader: "pbr_fragment.glsl"
+
+  # - transform:
+  #     translation: [0.0, 0.0, 0.0]
+  #     rotation: [0.0, 0.0, 0.0]
+  #     scale: [3.0, 3.0, 3.0]
+  #   render:
+  #     model: "bee/79342.fbx"
+  #     shader: "pbr_fragment.glsl"
+
+------------------------------------------------------------
 Archivo: config\entities.yaml
 ------------------------------------------------------------
 # entities.yaml - Definición de entidades
@@ -205,7 +281,6 @@ private:
 ------------------------------------------------------------
 Archivo: include\core\Coordinator.h
 ------------------------------------------------------------
-// Coordinator.h
 #pragma once
 
 #include "EntityManager.h"
@@ -275,6 +350,17 @@ public:
     template <typename T>
     void SetSystemSignature(ECS::Signature signature) {
         mSystemManager->SetSignature<T>(signature);
+    }
+    
+    // Nuevo método para limpiar todas las entidades (reset del ECS)
+    void Clear() {
+        // Se notifica la destrucción a todos los sistemas y componentes de cada entidad.
+        for (ECS::Entity entity = 0; entity < ECS::MAX_ENTITIES; ++entity) {
+            mComponentManager->EntityDestroyed(entity);
+            mSystemManager->EntityDestroyed(entity);
+        }
+        // Se "reinicia" el EntityManager
+        mEntityManager = std::make_unique<EntityManager>();
     }
 
 private:
@@ -723,24 +809,35 @@ Archivo: include\engine\LightManager.h
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 
-class LightManager {
+class LightManager
+{
 public:
     std::vector<Light> lights;
     UniformBuffer lightUBO;
+    // Bandera para saber si las luces han cambiado
+    bool lightsChanged = true;
 
-    LightManager() {
+    LightManager()
+    {
         Logger::Info("[LightManager] Created and UBO initialized.");
+        // Aquí se inicializa el UBO
     }
-    
-    void UpdateUBO() {
-        // Se usa throttling para evitar loguear cada frame.
+
+    void UpdateUBO()
+    {
+        // Si no han cambiado, se evita la actualización
+        if (!lightsChanged)
+            return;
+
         Logger::ThrottledLog("LightManager_UpdateUBO", LogLevel::INFO, "[LightManager] Updating UBO", 0.5);
         constexpr int maxLights = 10;
         std::vector<Light> lightData(maxLights);
-        for (int i = 0; i < maxLights; i++) {
+        for (int i = 0; i < maxLights; i++)
+        {
             if (i < static_cast<int>(lights.size()))
                 lightData[i] = lights[i];
-            else {
+            else
+            {
                 lightData[i].typeAndPadding = glm::vec4(-1, 0, 0, 0);
                 lightData[i].position = glm::vec4(0.0f);
                 lightData[i].direction = glm::vec4(0.0f);
@@ -753,19 +850,129 @@ public:
         glBufferData(GL_UNIFORM_BUFFER, dataSize, lightData.data(), GL_DYNAMIC_DRAW);
         lightUBO.Unbind();
         Logger::ThrottledLog("LightManager_UBOUpdated", LogLevel::INFO,
-            "[LightManager] UBO updated (" + std::to_string(lights.size()) +
-            " active lights, max " + std::to_string(maxLights) + ").", 0.5);
+                             "[LightManager] UBO updated (" + std::to_string(lights.size()) +
+                                 " active lights, max " + std::to_string(maxLights) + ").",
+                             0.5);
+
+        // Se marca como actualizado
+        lightsChanged = false;
     }
-    
-    void AddLight(const Light& light) {
+
+    void AddLight(const Light &light)
+    {
         lights.push_back(light);
+        lightsChanged = true;
         Logger::Debug("[LightManager] Added light. Total: " + std::to_string(lights.size()));
     }
-    
-    void ClearLights() {
+
+    void ClearLights()
+    {
         lights.clear();
+        lightsChanged = true;
         Logger::Info("[LightManager] Cleared all lights.");
     }
+};
+
+------------------------------------------------------------
+Archivo: include\engine\Scene.h
+------------------------------------------------------------
+#pragma once
+
+/**
+ * @brief Interfaz base para una escena.
+ *
+ * Define los métodos necesarios para inicializar, actualizar, renderizar y limpiar la escena.
+ */
+class Scene {
+public:
+    virtual void Init() = 0;         // Cargar recursos, entidades, sistemas, etc.
+    virtual void Update(float dt) = 0; // Lógica de actualización (input, movimiento, etc.)
+    virtual void Render() = 0;       // Renderizado de la escena
+    virtual void Destroy() = 0;      // Liberar recursos propios de la escena
+    virtual ~Scene() {}
+};
+
+------------------------------------------------------------
+Archivo: include\engine\SceneManager.h
+------------------------------------------------------------
+#pragma once
+#include <memory>
+#include "Scene.h"
+
+/**
+ * @brief SceneManager es un singleton que se encarga de mantener la escena actual
+ * y cambiar entre escenas llamando a sus métodos Init() y Destroy().
+ */
+class SceneManager {
+public:
+    static SceneManager& GetInstance() {
+        static SceneManager instance;
+        return instance;
+    }
+    
+    // Cambia la escena actual. Si había una anterior, se llama a Destroy() y se libera.
+    void SwitchScene(std::unique_ptr<Scene> newScene) {
+        if (currentScene) {
+            currentScene->Destroy();
+        }
+        currentScene = std::move(newScene);
+        if (currentScene) {
+            currentScene->Init();
+        }
+    }
+    
+    void Update(float dt) {
+        if (currentScene)
+            currentScene->Update(dt);
+    }
+    
+    void Render() {
+        if (currentScene)
+            currentScene->Render();
+    }
+    
+private:
+    std::unique_ptr<Scene> currentScene;
+    
+    // Constructor privado para forzar la condición de singleton
+    SceneManager() = default;
+    SceneManager(const SceneManager&) = delete;
+    SceneManager& operator=(const SceneManager&) = delete;
+};
+
+------------------------------------------------------------
+Archivo: include\engine\SceneResources.h
+------------------------------------------------------------
+#pragma once
+#include <map>
+#include <memory>
+#include <string>
+#include "renderer/Shader.h"
+#include "renderer/Texture2D.h"
+#include "renderer/Model.h"
+
+/**
+ * @brief Clase para gestionar recursos exclusivos de una escena.
+ *
+ * Permite cargar shaders, texturas y modelos de forma local, sin compartirlos con otras escenas.
+ */
+class SceneResources {
+public:
+    std::shared_ptr<Shader> LoadShader(const char* vShaderFile, const char* fShaderFile, const std::string& name);
+    std::shared_ptr<Texture2D> LoadTexture(const char* file, bool alpha, const std::string& name);
+    std::shared_ptr<Model> LoadModel(const char* file, const std::string& name);
+    
+    std::shared_ptr<Shader> GetShader(const std::string& name);
+    std::shared_ptr<Texture2D> GetTexture(const std::string& name);
+    std::shared_ptr<Model> GetModel(const std::string& name);
+    
+    // Libera todos los recursos cargados en esta escena.
+    void Clear();
+    
+private:
+    std::map<std::string, std::shared_ptr<Shader>> shaders;
+    std::map<std::string, std::shared_ptr<Texture2D>> textures;
+    std::map<std::string, std::shared_ptr<Model>> models;
 };
 
 ------------------------------------------------------------
@@ -891,6 +1098,8 @@ public:
     static std::shared_ptr<Shader> GetShader(const std::string& name);
     static std::shared_ptr<Texture2D> GetTexture(const std::string& name);
     static std::shared_ptr<Model> GetModel(const std::string& name);
+
+    static const Config& GetConfig() { return m_Config; }
 
     static void Clear();
 
@@ -1800,6 +2009,345 @@ public:
 };
 
 ------------------------------------------------------------
+Archivo: scenes\scene1.cpp
+------------------------------------------------------------
+#include "Scene1.h"
+#include "core/EntityLoader.h"
+#include "systems/RenderSystem.h"
+#include "renderer/ResourceManager.h"
+#include "utils/Logger.h"
+#include <iostream>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm.hpp>
+
+Scene1::Scene1() : renderSystem(nullptr), currentDeltaTime(0.0f) { }
+
+Scene1::~Scene1() {
+    Destroy();
+}
+
+void Scene1::Init() {
+    Logger::Info("[Scene1] Inicializando escena 1");
+    
+    // Inicializamos el coordinator exclusivo para Scene1.
+    coordinator = std::make_unique<Coordinator>();
+    coordinator->Init();
+    coordinator->RegisterComponent<TransformComponent>();
+    coordinator->RegisterComponent<RenderComponent>();
+    
+    renderSystem = coordinator->RegisterSystem<RenderSystem>();
+    ECS::Signature signature;
+    signature.set(coordinator->GetComponentType<TransformComponent>());
+    signature.set(coordinator->GetComponentType<RenderComponent>());
+    coordinator->SetSystemSignature<RenderSystem>(signature);
+    
+    // Cargar el shader exclusivo para Scene1.
+    shader = sceneResources.LoadShader("pbr_vertex.glsl", "pbr_fragment.glsl", "scene1Shader");
+    if (!shader) {
+        Logger::Error("[Scene1] Error al cargar shader 'scene1Shader'.");
+        return;
+    }
+    
+    // Configurar la cámara propia.
+    camera.Position = glm::vec3(0.0f, 10.0f, 20.0f);
+    camera.Front = glm::normalize(glm::vec3(0.0f) - camera.Position);
+    camera.Up = glm::vec3(0, 1, 0);
+    
+    // Inicializar el RenderSystem con el coordinator, el shader y la cámara propia.
+    renderSystem->Init(coordinator.get(), shader.get(), &camera);
+    
+    // Configurar las luces usando la configuración global.
+    const Config& config = ResourceManager::GetConfig();
+    lightManager = std::make_unique<LightManager>();
+    for (const auto &lc : config.lights) {
+        Light light{};
+        if (lc.type == "point")
+            light.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        light.position = glm::vec4(lc.position, 1.0f);
+        light.colorAndIntensity = glm::vec4(lc.color, 1.0f);
+        lightManager->AddLight(light);
+    }
+    unsigned int lightBlockIndex = glGetUniformBlockIndex(shader->ID, "LightBlock");
+    if (lightBlockIndex == GL_INVALID_INDEX) {
+        Logger::Error("[Scene1] 'LightBlock' uniform block not found in shader.");
+    } else {
+        GLCall(glUniformBlockBinding(shader->ID, lightBlockIndex, 1));
+        Logger::Info("[Scene1] LightBlock bound to binding point 1.");
+    }
+    
+    // Cargar las entidades específicas de Scene1.
+    EntityLoader::LoadEntitiesFromYAML(coordinator.get(), "./config/entities_scene1.yaml");
+    
+    // Asumir que la primera entidad (ID 0) es el vehículo del jugador, crear el controlador.
+    playerController = std::make_unique<ECSPlayerController>(coordinator.get(), 0);
+    
+    Logger::Info("[Scene1] Escena 1 inicializada.");
+}
+
+void Scene1::Update(float dt) {
+    currentDeltaTime = dt;
+    
+    // Actualizar el controlador para mover el modelo (teclas W, A, S, D).
+    if (playerController) {
+        playerController->Update(dt);
+    }
+    
+    if (renderSystem) {
+        renderSystem->Update(dt);
+    }
+}
+
+void Scene1::Render() {
+    if (!shader) return;
+    shader->Use();
+
+    // Configurar los samplers.
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "albedoMap"), 0));
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "metallicRoughnessMap"), 1));
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "normalMap"), 2));
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "useMaps"), 1));
+    
+    // Configurar los uniforms de la cámara de Scene1.
+    glm::mat4 view = camera.GetViewMatrix();
+    GLCall(glUniformMatrix4fv(glGetUniformLocation(shader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view)));
+    GLCall(glUniform3fv(glGetUniformLocation(shader->ID, "camPos"), 1, glm::value_ptr(camera.Position)));
+    
+    // Configurar la proyección.
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f/1080.0f, 0.1f, 100.0f);
+    GLCall(glUniformMatrix4fv(glGetUniformLocation(shader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection)));
+    
+    // Actualizar y vincular el UBO de las luces.
+    if (lightManager) {
+        lightManager->UpdateUBO();
+        lightManager->lightUBO.BindToPoint(1);
+        const Config& config = ResourceManager::GetConfig();
+        GLCall(glUniform3fv(glGetUniformLocation(shader->ID, "ambientColor"), 1, glm::value_ptr(config.ambientColor)));
+    }
+    
+    // Llamar al RenderSystem para renderizar las entidades.
+    if (renderSystem) {
+        renderSystem->Update(currentDeltaTime);
+    }
+}
+
+void Scene1::Destroy() {
+    Logger::Info("[Scene1] Destruyendo escena 1");
+    if (coordinator) {
+        coordinator.reset();
+    }
+    sceneResources.Clear();
+    if (lightManager) {
+        lightManager->ClearLights();
+        lightManager.reset();
+    }
+    Logger::Info("[Scene1] Escena 1 destruida.");
+}
+
+------------------------------------------------------------
+Archivo: scenes\scene1.h
+------------------------------------------------------------
+#pragma once
+#include "engine/Scene.h"
+#include <memory>
+#include "core/Coordinator.h"
+#include "engine/SceneResources.h"
+#include "systems/RenderSystem.h"
+#include "engine/LightManager.h"
+#include "renderer/Shader.h"
+#include "engine/Camera.h"
+#include "engine/ECSPlayerController.h"
+
+class Scene1 : public Scene {
+public:
+    Scene1();
+    virtual ~Scene1();
+    
+    void Init() override;
+    void Update(float dt) override;
+    void Render() override;
+    void Destroy() override;
+    
+private:
+    std::unique_ptr<Coordinator> coordinator;
+    std::shared_ptr<Shader> shader;
+    SceneResources sceneResources;
+    std::shared_ptr<RenderSystem> renderSystem;
+    std::unique_ptr<LightManager> lightManager;
+    
+    // Cámara propia para Scene1.
+    Camera camera;
+    
+    // Miembro para almacenar el delta time actual.
+    float currentDeltaTime;
+    
+    // Controlador para mover el modelo con teclas W, A, S, D.
+    std::unique_ptr<ECSPlayerController> playerController;
+};
+
+------------------------------------------------------------
+Archivo: scenes\scene2.cpp
+------------------------------------------------------------
+#include "Scene2.h"
+#include "core/EntityLoader.h"
+#include "systems/RenderSystem.h"
+#include "renderer/ResourceManager.h"
+#include "utils/Logger.h"
+#include <iostream>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm.hpp>
+
+Scene2::Scene2() : renderSystem(nullptr), currentDeltaTime(0.0f) { }
+
+Scene2::~Scene2() {
+    Destroy();
+}
+
+void Scene2::Init() {
+    Logger::Info("[Scene2] Inicializando escena 2");
+    
+    coordinator = std::make_unique<Coordinator>();
+    coordinator->Init();
+    coordinator->RegisterComponent<TransformComponent>();
+    coordinator->RegisterComponent<RenderComponent>();
+    
+    renderSystem = coordinator->RegisterSystem<RenderSystem>();
+    ECS::Signature signature;
+    signature.set(coordinator->GetComponentType<TransformComponent>());
+    signature.set(coordinator->GetComponentType<RenderComponent>());
+    coordinator->SetSystemSignature<RenderSystem>(signature);
+    
+    shader = sceneResources.LoadShader("pbr_vertex.glsl", "pbr_fragment.glsl", "scene2Shader");
+    if (!shader) {
+        Logger::Error("[Scene2] Error al cargar shader 'scene2Shader'.");
+        return;
+    }
+    
+    // Configurar la cámara de Scene2 (igual que en Scene1 por ahora).
+    camera.Position = glm::vec3(0.0f, 10.0f, 20.0f);
+    camera.Front = glm::normalize(glm::vec3(0.0f) - camera.Position);
+    camera.Up = glm::vec3(0, 1, 0);
+    
+    // **FALTA esta línea en la versión actual de Scene2:**
+    renderSystem->Init(coordinator.get(), shader.get(), &camera);
+    
+    const Config& config = ResourceManager::GetConfig();
+    lightManager = std::make_unique<LightManager>();
+    for (const auto &lc : config.lights) {
+        Light light{};
+        if (lc.type == "point")
+            light.typeAndPadding = glm::vec4(0, 0, 0, 0);
+        light.position = glm::vec4(lc.position, 1.0f);
+        light.colorAndIntensity = glm::vec4(lc.color, 1.0f);
+        lightManager->AddLight(light);
+    }
+    unsigned int lightBlockIndex = glGetUniformBlockIndex(shader->ID, "LightBlock");
+    if (lightBlockIndex == GL_INVALID_INDEX) {
+        Logger::Error("[Scene2] 'LightBlock' uniform block not found in shader.");
+    } else {
+        GLCall(glUniformBlockBinding(shader->ID, lightBlockIndex, 1));
+        Logger::Info("[Scene2] LightBlock bound to binding point 1.");
+    }
+    
+    EntityLoader::LoadEntitiesFromYAML(coordinator.get(), "./config/entities_scene2.yaml");
+
+    // Asumir que la primera entidad (ID 0) es el vehículo del jugador, crear el controlador.
+    playerController = std::make_unique<ECSPlayerController>(coordinator.get(), 0);
+    Logger::Info("[Scene2] Escena 2 inicializada.");
+}
+
+void Scene2::Update(float dt) {
+    currentDeltaTime = dt;
+    
+    // Actualizar el controlador para mover el modelo (teclas W, A, S, D).
+    if (playerController) {
+        playerController->Update(dt);
+    }
+    
+    if (renderSystem) {
+        renderSystem->Update(dt);
+    }
+}
+
+void Scene2::Render() {
+    if (!shader) return;
+    shader->Use();
+
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "albedoMap"), 0));
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "metallicRoughnessMap"), 1));
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "normalMap"), 2));
+    GLCall(glUniform1i(glGetUniformLocation(shader->ID, "useMaps"), 1));
+    
+    glm::mat4 view = camera.GetViewMatrix();
+    GLCall(glUniformMatrix4fv(glGetUniformLocation(shader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view)));
+    GLCall(glUniform3fv(glGetUniformLocation(shader->ID, "camPos"), 1, glm::value_ptr(camera.Position)));
+    
+    glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f/1080.0f, 0.1f, 100.0f);
+    GLCall(glUniformMatrix4fv(glGetUniformLocation(shader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection)));
+    
+    if (lightManager) {
+        lightManager->UpdateUBO();
+        lightManager->lightUBO.BindToPoint(1);
+        GLCall(glUniform3fv(glGetUniformLocation(shader->ID, "ambientColor"), 1, glm::value_ptr(ResourceManager::GetConfig().ambientColor)));
+    }
+    
+    if (renderSystem) {
+        renderSystem->Update(0.0f);
+    }
+}
+
+void Scene2::Destroy() {
+    Logger::Info("[Scene2] Destruyendo escena 2");
+    if (coordinator) {
+        coordinator.reset();
+    }
+    sceneResources.Clear();
+    if (lightManager) {
+        lightManager->ClearLights();
+        lightManager.reset();
+    }
+    Logger::Info("[Scene2] Escena 2 destruida.");
+}
+
+------------------------------------------------------------
+Archivo: scenes\scene2.h
+------------------------------------------------------------
+#pragma once
+#include "engine/Scene.h"
+#include <memory>
+#include "core/Coordinator.h"
+#include "engine/SceneResources.h"
+#include "systems/RenderSystem.h"
+#include "engine/LightManager.h"
+#include "renderer/Shader.h"
+#include "engine/Camera.h"
+#include "engine/ECSPlayerController.h"
+
+class Scene2 : public Scene {
+public:
+    Scene2();
+    virtual ~Scene2();
+    
+    void Init() override;
+    void Update(float dt) override;
+    void Render() override;
+    void Destroy() override;
+    
+private:
+    std::unique_ptr<Coordinator> coordinator;
+    std::shared_ptr<Shader> shader;
+    SceneResources sceneResources;
+    std::shared_ptr<RenderSystem> renderSystem;
+    std::unique_ptr<LightManager> lightManager;
+    
+    // Cámara propia para Scene2.
+    Camera camera;
+    float currentDeltaTime;
+
+    // Controlador para mover el modelo con teclas W, A, S, D.
+    std::unique_ptr<ECSPlayerController> playerController;
+};
+
+------------------------------------------------------------
 Archivo: src\Config.cpp
 ------------------------------------------------------------
 #include "engine/Config.h"
@@ -1964,9 +2512,8 @@ Archivo: src\Main.cpp
  * @file Main.cpp
  * @brief Entry point for the engine using ECS and YAML-based configuration.
  *
- * This application initializes GLFW and GLAD, loads resources using paths resolved from config.yaml,
- * sets up the ECS (loading entities from entities.yaml), configures a player controller,
- * configures lights from the configuration, and runs the render loop.
+ * This application initializes GLFW and GLAD, loads configuration from config.yaml,
+ * sets up the scene management system, and runs the render loop.
  */
 
 #ifdef _DEBUG
@@ -1979,36 +2526,29 @@ Archivo: src\Main.cpp
 #include <iostream>
 #include <sstream>
 #include <cassert>
-#include "renderer/ResourceManager.h"
+#include <filesystem>
 #include "engine/Config.h"
 #include "utils/Logger.h"
-#include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
-#include <glm/gtc/type_ptr.hpp>
-#include <filesystem>
-#include "core/Coordinator.h"
-#include "core/EntityLoader.h"
-#include "systems/RenderSystem.h"
-#include "renderer/Shader.h"
-#include "engine/Camera.h"
-#include "engine/Light.h"
-#include "engine/LightManager.h"
-#include "engine/ECSPlayerController.h"
 #include "utils/GLDebug.h"
+#include "renderer/ResourceManager.h"
+#include "engine/SceneManager.h"
+#include "../scenes/Scene1.h"
+#include "../scenes/Scene2.h"
+
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
+// Global variables for timing
 float deltaTime = 0.0f, lastFrame = 0.0f;
-Camera camera;
 
-// Callback para errores de GLFW.
+// Callback for GLFW errors.
 void glfwErrorCallback(int error, const char *description)
 {
     Logger::Error("[GLFW] Error (" + std::to_string(error) + "): " + std::string(description));
 }
 
-// Callback para redimensionar el framebuffer.
+// Callback for resizing the framebuffer.
 void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     GLCall(glViewport(0, 0, width, height));
@@ -2018,19 +2558,24 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
                          0.5);
 }
 
-void SetWorkingDirectoryToExecutablePath() {
-    #ifdef _WIN32
-        char exePath[MAX_PATH];
-        if (GetModuleFileNameA(NULL, exePath, MAX_PATH) != 0) {
-            std::filesystem::path p(exePath);
-            // Retroceder al directorio raíz del proyecto, asumiendo que el exe está en build/Release.
-            std::filesystem::path projectRoot = p.parent_path().parent_path().parent_path(); // Ajusta según la estructura real
-            std::filesystem::current_path(projectRoot);
-            Logger::Info(std::string("Working directory set to: ") + std::filesystem::current_path().string());
-        } else {
-            Logger::Error("Error obtaining the executable path.");
-        }
-    #endif
+// Set working directory to the executable path (Windows version).
+void SetWorkingDirectoryToExecutablePath()
+{
+#ifdef _WIN32
+    char exePath[MAX_PATH];
+    if (GetModuleFileNameA(NULL, exePath, MAX_PATH) != 0)
+    {
+        std::filesystem::path p(exePath);
+        // Adjust to project root assuming the exe is in build/Release (modify as needed)
+        std::filesystem::path projectRoot = p.parent_path().parent_path().parent_path();
+        std::filesystem::current_path(projectRoot);
+        Logger::Info("Working directory set to: " + std::filesystem::current_path().string());
+    }
+    else
+    {
+        Logger::Error("Error obtaining the executable path.");
+    }
+#endif
 }
 
 int main()
@@ -2043,13 +2588,12 @@ int main()
         Logger::Info("Main: Starting application.");
         SetWorkingDirectoryToExecutablePath();
 
-        // Cargar configuración desde config.yaml (ruta relativa).
+        // Load global configuration from config.yaml
         std::string configPath = "./config/config.yaml";
         Config config = Config::LoadFromFile(configPath);
-
-        // Inyectar la configuración en ResourceManager.
         ResourceManager::SetConfig(config);
 
+        // Initialize GLFW.
         if (!glfwInit())
         {
             Logger::Error("Main: Failed to initialize GLFW.");
@@ -2071,82 +2615,27 @@ int main()
         glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
+        // Initialize GLAD.
         if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
         {
             Logger::Error("Main: Failed to initialize GLAD.");
             return -1;
         }
 
-        // Configurar callback de depuración de OpenGL.
+        // Setup OpenGL debug callback.
         SetupOpenGLDebugCallback();
 
+        // Enable OpenGL features.
         GLCall(glEnable(GL_DEPTH_TEST));
         GLCall(glEnable(GL_FRAMEBUFFER_SRGB));
         GLCall(glEnable(GL_BLEND));
         GLCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
-        // Inicializar ECS coordinator.
-        Coordinator coordinator;
-        coordinator.Init();
-        coordinator.RegisterComponent<TransformComponent>();
-        coordinator.RegisterComponent<RenderComponent>();
-
-        auto renderSystem = coordinator.RegisterSystem<RenderSystem>();
-        ECS::Signature renderSignature;
-        renderSignature.set(coordinator.GetComponentType<TransformComponent>());
-        renderSignature.set(coordinator.GetComponentType<RenderComponent>());
-        coordinator.SetSystemSignature<RenderSystem>(renderSignature);
-
-        // Cargar entidades desde entities.yaml (ruta relativa).
-        std::string entityConfigPath = "./config/entities.yaml";
-
-        EntityLoader::LoadEntitiesFromYAML(&coordinator, entityConfigPath);
-
-        // Asumir que la primera entidad (ID 0) es el vehículo del jugador.
-        ECS::Entity playerEntity = 0;
-        ECSPlayerController playerController(&coordinator, playerEntity);
-
-        // Cargar el shader global:
-        // Vertex shader se toma de config.vertexShader y fragment shader de config.defaultShader.
-        std::string vertexShaderPath = config.vertexShader;
-        std::string fragmentShaderPath = config.defaultShader;
-        auto defaultShader = ResourceManager::LoadShader(vertexShaderPath.c_str(), fragmentShaderPath.c_str(), "defaultShader");
-        defaultShader->Use();
-        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "albedoMap"), 0));
-        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "metallicRoughnessMap"), 1));
-        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "normalMap"), 2));
-        GLCall(glUniform1i(glGetUniformLocation(defaultShader->ID, "useMaps"), 1));
-        glm::mat4 projection = glm::perspective(glm::radians(45.0f), 1920.0f / 1080.0f, 0.1f, 100.0f);
-        GLCall(glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "projection"), 1, GL_FALSE, glm::value_ptr(projection)));
-        Logger::Info("Main: Default shaders loaded successfully.");
-
-        renderSystem->Init(&coordinator, defaultShader.get(), &camera);
-
-        // Configurar las luces usando la información de config.yaml.
-        LightManager lightManager;
-        for (const auto &lc : config.lights)
-        {
-            Light light{};
-            if (lc.type == "point")
-                light.typeAndPadding = glm::vec4(0, 0, 0, 0);
-            light.position = glm::vec4(lc.position, 1.0f);
-            light.colorAndIntensity = glm::vec4(lc.color, 1.0f);
-            lightManager.AddLight(light);
-        }
-
-        unsigned int lightBlockIndex = glGetUniformBlockIndex(defaultShader->ID, "LightBlock");
-        if (lightBlockIndex == GL_INVALID_INDEX)
-        {
-            Logger::Error("Main: 'LightBlock' uniform block not found in shader.");
-        }
-        else
-        {
-            GLCall(glUniformBlockBinding(defaultShader->ID, lightBlockIndex, 1));
-            Logger::Info("Main: LightBlock bound to binding point 1.");
-        }
+        // Initialize the SceneManager with the initial scene (Scene1).
+        SceneManager::GetInstance().SwitchScene(std::make_unique<Scene1>());
 
         Logger::Info("Main: Entering main loop.");
-        // Bucle principal de renderizado.
+        // Main render loop.
         while (!glfwWindowShouldClose(window))
         {
             float currentFrame = static_cast<float>(glfwGetTime());
@@ -2156,29 +2645,26 @@ int main()
             glfwPollEvents();
             if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
                 glfwSetWindowShouldClose(window, true);
-
-            playerController.Update(deltaTime);
-
-            // Configurar la cámara fija para observar el modelo.
-            camera.Position = glm::vec3(0.0f, 10.0f, 20.0f);
-            camera.Front = glm::normalize(glm::vec3(0.0f) - camera.Position);
-            camera.Up = glm::vec3(0, 1, 0);
-
+            
+            // Limpiar el framebuffer:
             GLCall(glClearColor(0.1f, 0.1f, 0.1f, 1.0f));
             GLCall(glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT));
 
-            defaultShader->Use();
-            glm::mat4 view = camera.GetViewMatrix();
-            GLCall(glUniformMatrix4fv(glGetUniformLocation(defaultShader->ID, "view"), 1, GL_FALSE, glm::value_ptr(view)));
-            GLCall(glUniform3fv(glGetUniformLocation(defaultShader->ID, "camPos"), 1, glm::value_ptr(camera.Position)));
+            // Switch scenes: Press key '2' to switch to Scene2, key '1' to switch back to Scene1.
+            if (glfwGetKey(window, GLFW_KEY_2) == GLFW_PRESS)
+            {
+                SceneManager::GetInstance().SwitchScene(std::make_unique<Scene2>());
+            }
+            else if (glfwGetKey(window, GLFW_KEY_1) == GLFW_PRESS)
+            {
+                SceneManager::GetInstance().SwitchScene(std::make_unique<Scene1>());
+            }
 
-            lightManager.UpdateUBO();
-            lightManager.lightUBO.BindToPoint(1);
-            GLCall(glUniform3fv(glGetUniformLocation(defaultShader->ID, "ambientColor"), 1, glm::value_ptr(config.ambientColor)));
+            // Update and render the current scene.
+            SceneManager::GetInstance().Update(deltaTime);
+            SceneManager::GetInstance().Render();
 
-            renderSystem->Update(deltaTime);
-
-            // Logging extendido: verificar el estado del framebuffer.
+            // Verify framebuffer status.
             GLenum fbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
             if (fbStatus != GL_FRAMEBUFFER_COMPLETE)
             {
@@ -2195,7 +2681,6 @@ int main()
         }
 
         Logger::Info("Main: Exiting main loop. Cleaning up resources.");
-        ResourceManager::Clear();
         glfwTerminate();
         return 0;
     }
@@ -2406,16 +2891,43 @@ void Model::processNode(aiNode* node, const aiScene* scene, const glm::mat4& par
 void Model::loadModel(const std::string &path) {
     Logger::Info("[Model::loadModel] Starting load: " + path);
     
+    // Guarda la ruta original tal como se recibe.
+    std::string originalPath = path;
+    
+    // Normaliza la ruta.
+    std::string filePath = FileUtils::NormalizePath(path);
+    std::filesystem::path p(filePath);
+    std::string expectedPath = filePath;
+    
+    // Obtén la configuración global a través del ResourceManager.
+    const Config& config = ResourceManager::GetConfig();
+    Logger::Debug("[Model::loadModel] Config.projectRoot: " + config.projectRoot +
+                  ", config.assets: " + config.assets);
+    
+    // Construir el prefijo esperado.
+    std::string prefix = config.projectRoot + config.assets; // Ejemplo: "./assets"
+    
+    // Si la ruta no es absoluta y no empieza ya por el prefijo, resolver la ruta.
+    if (!p.is_absolute() && filePath.rfind(prefix, 0) != 0) {
+        expectedPath = FileUtils::ResolvePath(prefix, filePath);
+        filePath = expectedPath;
+    }
+    
+    Logger::Info("[Model::loadModel] Attempting to load model from: " + filePath);
+    
     Assimp::Importer importer;
-    const aiScene *scene = importer.ReadFile(path,
+    const aiScene *scene = importer.ReadFile(filePath,
         aiProcess_Triangulate | aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
     
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
-        Logger::Error("[Model::loadModel] Failed to load file: " + path + "\nReason: " + importer.GetErrorString());
+        Logger::Error("[Model::loadModel] Failed to load file: " + originalPath + "\n"
+                      "Attempted path: " + filePath + "\n"
+                      "Expected path: " + expectedPath + "\n"
+                      "Reason: " + importer.GetErrorString());
         return;
     }
     
-    std::filesystem::path modelFilePath(path);
+    std::filesystem::path modelFilePath(filePath);
     std::string modelDir = modelFilePath.parent_path().generic_string();
     Logger::Info("[Model::loadModel] Base directory: " + modelDir);
     
@@ -2557,10 +3069,13 @@ void RenderSystem::Init(Coordinator* coordinator, Shader* shader, Camera* camera
 
 void RenderSystem::Update(float dt) {
     if (!mCoordinator || !mShader || !mCamera) return;
-
+    
+    // Asegurarse de que el shader esté activo.
+    mShader->Use();
+    
     glm::vec3 camPos = mCamera->Position;
 
-    // Recoger entidades y ordenarlas por el puntero al Model para agrupar draw calls
+    // Recoger entidades y ordenarlas (código de ejemplo)
     std::vector<std::pair<Model*, ECS::Entity>> sortedEntities;
     for (auto entity : mEntities) {
         auto& render = mCoordinator->GetComponent<RenderComponent>(entity);
@@ -2574,12 +3089,10 @@ void RenderSystem::Update(float dt) {
         }
     );
 
-    // Renderizar entidades ordenadas con culling simple (omitiendo aquellas muy lejanas)
+    // Renderizar entidades (suponiendo culling, etc.)
     for (const auto& pair : sortedEntities) {
         ECS::Entity entity = pair.second;
         auto& transform = mCoordinator->GetComponent<TransformComponent>(entity);
-        if (glm::distance(transform.translation, camPos) > 100.0f)
-            continue;
         transform.UpdateTransform();
         GLCall(glUniformMatrix4fv(mModelLoc, 1, GL_FALSE, glm::value_ptr(transform.transform)));
         auto& render = mCoordinator->GetComponent<RenderComponent>(entity);
@@ -2591,7 +3104,6 @@ void RenderSystem::Update(float dt) {
 ------------------------------------------------------------
 Archivo: src\ResourceManager.cpp
 ------------------------------------------------------------
-// ResourceManager.cpp
 #include "renderer/ResourceManager.h"
 #include "utils/FileUtils.h"
 #include "utils/Logger.h"
@@ -2600,6 +3112,7 @@ Archivo: src\ResourceManager.cpp
 #include <cassert>
 #include <future>
 
+// Definición de variables estáticas
 Config ResourceManager::m_Config;
 std::map<std::string, std::shared_ptr<Shader>> ResourceManager::Shaders;
 std::map<std::string, std::shared_ptr<Texture2D>> ResourceManager::Textures;
@@ -2607,6 +3120,11 @@ std::map<std::string, std::shared_ptr<Model>> ResourceManager::Models;
 
 std::shared_ptr<Shader> ResourceManager::LoadShader(const char *vShaderFile, const char *fShaderFile, std::string name)
 {
+    // Si ya está cargado, lo devolvemos
+    auto it = Shaders.find(name);
+    if (it != Shaders.end())
+        return it->second;
+
     try
     {
         std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
@@ -2654,6 +3172,11 @@ std::shared_ptr<Shader> ResourceManager::LoadShaderWithFragment(const std::strin
 
 std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool alpha, std::string name)
 {
+    // Si ya está cargada, la devolvemos
+    auto it = Textures.find(name);
+    if (it != Textures.end())
+        return it->second;
+
     try
     {
         std::string filePath = FileUtils::NormalizePath(file);
@@ -2714,6 +3237,11 @@ std::shared_ptr<Texture2D> ResourceManager::LoadTexture(const char *file, bool a
 
 std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string name)
 {
+    // Si ya está cargado, lo devolvemos
+    auto it = Models.find(name);
+    if (it != Models.end())
+        return it->second;
+
     try
     {
         std::string filePath = FileUtils::NormalizePath(file);
@@ -2733,8 +3261,6 @@ std::shared_ptr<Model> ResourceManager::LoadModel(const char *file, std::string 
         return nullptr;
     }
 }
-
-// Funciones asíncronas
 
 std::future<std::shared_ptr<Texture2D>> ResourceManager::LoadTextureAsync(const char *file, bool alpha, std::string name) {
     return std::async(std::launch::async, [file, alpha, name]() {
@@ -2769,6 +3295,141 @@ void ResourceManager::Clear() {
         GLCall(glDeleteTextures(1, &iter.second->ID));
     Textures.clear();
     Models.clear();
+}
+
+------------------------------------------------------------
+Archivo: src\SceneResources.cpp
+------------------------------------------------------------
+#include "engine/SceneResources.h"
+#include "utils/FileUtils.h"
+#include "utils/Logger.h"
+#include <filesystem>
+#include "utils/GLDebug.h"
+#include "stb_image.h" // Asegúrate de incluir stb_image
+
+std::shared_ptr<Shader> SceneResources::LoadShader(const char* vShaderFile, const char* fShaderFile, const std::string& name) {
+    // Si ya existe, devolver el recurso
+    auto it = shaders.find(name);
+    if(it != shaders.end())
+        return it->second;
+    
+    try {
+        std::string vertexPath = FileUtils::NormalizePath(vShaderFile);
+        std::filesystem::path vp(vertexPath);
+        if (!vp.is_absolute()) {
+            // Suponemos que los shaders se encuentran en "./shaders/"
+            vertexPath = FileUtils::ResolvePath("./shaders/", vertexPath);
+        }
+        std::string fragmentPath = FileUtils::NormalizePath(fShaderFile);
+        std::filesystem::path fp(fragmentPath);
+        if (!fp.is_absolute()) {
+            fragmentPath = FileUtils::ResolvePath("./shaders/", fragmentPath);
+        }
+        
+        auto shader = std::make_shared<Shader>();
+        shader->Compile(vertexPath.c_str(), fragmentPath.c_str());
+        shaders[name] = shader;
+        Logger::Info("[SceneResources] Shader loaded: " + name + " (ID: " + std::to_string(shader->ID) + ")");
+        return shader;
+    } catch (const std::exception& e) {
+        Logger::Error("[SceneResources] Exception while loading shader: " + std::string(e.what()));
+        return nullptr;
+    }
+}
+
+std::shared_ptr<Texture2D> SceneResources::LoadTexture(const char* file, bool alpha, const std::string& name) {
+    // Si ya está cargada, devolverla
+    auto it = textures.find(name);
+    if(it != textures.end())
+        return textures[name];
+    
+    try {
+        std::string filePath = FileUtils::NormalizePath(file);
+        std::filesystem::path p(filePath);
+        if (!p.is_absolute()) {
+            // Suponemos que las texturas se encuentran en "./assets/"
+            filePath = FileUtils::ResolvePath("./assets/", filePath);
+        }
+        
+        Logger::Debug("[SceneResources] Loading texture from: " + filePath);
+        auto texture = std::make_shared<Texture2D>();
+        
+        int width, height, nrChannels;
+        unsigned char* data = stbi_load(filePath.c_str(), &width, &height, &nrChannels, alpha ? 4 : 3);
+        if (!data) {
+            Logger::Error("[SceneResources] Failed to load image: " + filePath);
+            return nullptr;
+        }
+        
+        FileUtils::ImageData imgData;
+        imgData.data = data;
+        imgData.width = width;
+        imgData.height = height;
+        imgData.channels = nrChannels;
+        texture->GenerateFromData(imgData, alpha);
+        textures[name] = texture;
+        Logger::Info("[SceneResources] Texture loaded: " + name + " (" + filePath + ")");
+        return texture;
+    } catch (const std::exception& e) {
+        Logger::Error("[SceneResources] Exception while loading texture: " + std::string(e.what()));
+        return nullptr;
+    }
+}
+
+std::shared_ptr<Model> SceneResources::LoadModel(const char* file, const std::string& name) {
+    // Si ya existe, devolverlo
+    auto it = models.find(name);
+    if(it != models.end())
+        return models[name];
+    
+    try {
+        std::string filePath = FileUtils::NormalizePath(file);
+        std::filesystem::path p(filePath);
+        if (!p.is_absolute()) {
+            filePath = FileUtils::ResolvePath("./assets/", filePath);
+        }
+        auto model = std::make_shared<Model>(filePath);
+        models[name] = model;
+        Logger::Info("[SceneResources] Model loaded: " + name);
+        return model;
+    } catch (const std::exception& e) {
+        Logger::Error("[SceneResources] Exception while loading model: " + std::string(e.what()));
+        return nullptr;
+    }
+}
+
+std::shared_ptr<Shader> SceneResources::GetShader(const std::string& name) {
+    if(shaders.find(name) != shaders.end())
+        return shaders[name];
+    return nullptr;
+}
+
+std::shared_ptr<Texture2D> SceneResources::GetTexture(const std::string& name) {
+    if(textures.find(name) != textures.end())
+        return textures[name];
+    return nullptr;
+}
+
+std::shared_ptr<Model> SceneResources::GetModel(const std::string& name) {
+    if(models.find(name) != models.end())
+        return models[name];
+    return nullptr;
+}
+
+void SceneResources::Clear() {
+    for(auto &iter : shaders) {
+        GLCall(glDeleteProgram(iter.second->ID));
+    }
+    shaders.clear();
+    
+    for(auto &iter : textures) {
+        GLCall(glDeleteTextures(1, &iter.second->ID));
+    }
+    textures.clear();
+    
+    models.clear();
+    
+    Logger::Info("[SceneResources] Cleared all scene resources.");
 }
 
 ------------------------------------------------------------

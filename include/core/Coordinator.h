@@ -1,4 +1,3 @@
-// Coordinator.h
 #pragma once
 
 #include "EntityManager.h"
@@ -68,6 +67,17 @@ public:
     template <typename T>
     void SetSystemSignature(ECS::Signature signature) {
         mSystemManager->SetSignature<T>(signature);
+    }
+    
+    // Nuevo método para limpiar todas las entidades (reset del ECS)
+    void Clear() {
+        // Se notifica la destrucción a todos los sistemas y componentes de cada entidad.
+        for (ECS::Entity entity = 0; entity < ECS::MAX_ENTITIES; ++entity) {
+            mComponentManager->EntityDestroyed(entity);
+            mSystemManager->EntityDestroyed(entity);
+        }
+        // Se "reinicia" el EntityManager
+        mEntityManager = std::make_unique<EntityManager>();
     }
 
 private:
