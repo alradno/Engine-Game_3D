@@ -24,6 +24,8 @@
 #include "engine/SceneManager.h"
 #include "../scenes/Scene1.h"
 #include "../scenes/Scene2.h"
+#include "../scenes/MenuScene.h"
+#include "core/InputManager.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -103,7 +105,8 @@ int main()
         }
         glfwMakeContextCurrent(window);
         glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        // Asigna la ventana al InputManager:
+        InputManager::SetWindow(window);
 
         // Initialize GLAD.
         if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
@@ -122,7 +125,7 @@ int main()
         GLCall(glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA));
 
         // Initialize the SceneManager with the initial scene (Scene1).
-        SceneManager::GetInstance().SwitchScene(std::make_unique<Scene1>());
+        SceneManager::GetInstance().SwitchScene(std::make_unique<MenuScene>());
 
         Logger::Info("Main: Entering main loop.");
         // Main render loop.

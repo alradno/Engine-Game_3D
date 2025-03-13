@@ -1,0 +1,36 @@
+entities:
+  - transform:
+      translation: [ -0.5, 0.3, 0.0 ]
+      rotation: [ 0.0, 0.0, 0.0 ]
+      scale: [ 0.3, 0.1, 1.0 ]
+    text:
+      content: "Play"
+      font: "fonts/american_captain/American Captain.otf"
+      size: 32
+      color: [0.0, 0.0, 0.0, 1.0]   # Texto en negro
+    button:
+      action: "play"
+
+  - transform:
+      translation: [ -0.5, 0.0, 0.0 ]
+      rotation: [ 0.0, 0.0, 0.0 ]
+      scale: [ 0.3, 0.1, 1.0 ]
+    text:
+      content: "Settings"
+      font: "fonts/american_captain/American Captain.otf"
+      size: 32
+      color: [0.0, 0.0, 0.0, 1.0]   # Texto en negro
+    button:
+      action: "settings"
+
+  - transform:
+      translation: [ -0.5, -0.3, 0.0 ]
+      rotation: [ 0.0, 0.0, 0.0 ]
+      scale: [ 0.3, 0.1, 1.0 ]
+    text:
+      content: "Exit"
+      font: "fonts/american_captain/American Captain.otf"
+      size: 32
+      color: [0.0, 0.0, 0.0, 1.0]   # Texto en negro
+    button:
+      action: "exit"

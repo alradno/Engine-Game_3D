@@ -8,6 +8,8 @@
 #include "utils/Logger.h"
 #include "components/TransformComponent.h"
 #include "components/RenderComponent.h"
+#include "components/TextComponent.h"   // Incluir para cargar el texto
+#include "components/ButtonComponent.h" // Incluir para cargar el botón
 #include "renderer/ResourceManager.h"
 #include "renderer/Model.h"
 #include <glm/glm.hpp>
@@ -65,16 +67,16 @@ void EntityLoader::LoadEntitiesFromYAML(Coordinator *coordinator, const std::str
                                   std::to_string(r[2]));
                 }
             }
-
             if (entityNode["transform"]["scale"])
             {
                 std::vector<float> s = entityNode["transform"]["scale"].as<std::vector<float>>();
-                if (s.size() >= 3) {
+                if (s.size() >= 3)
+                {
                     transform.scale = glm::vec3(s[0], s[1], s[2]);
                     Logger::Debug("[EntityLoader] Scale loaded: " +
-                        std::to_string(s[0]) + ", " +
-                        std::to_string(s[1]) + ", " +
-                        std::to_string(s[2]));
+                                  std::to_string(s[0]) + ", " +
+                                  std::to_string(s[1]) + ", " +
+                                  std::to_string(s[2]));
                 }
             }
             transform.UpdateTransform();
@@ -91,6 +93,46 @@ void EntityLoader::LoadEntitiesFromYAML(Coordinator *coordinator, const std::str
                 render.model = ResourceManager::LoadModel(modelPath.c_str(), modelPath);
             }
             coordinator->AddComponent<RenderComponent>(entity, render);
+        }
+
+        // Load TextComponent if present
+        if (entityNode["text"])
+        {
+            TextComponent textComp;
+            if (entityNode["text"]["content"])
+            {
+                textComp.content = entityNode["text"]["content"].as<std::string>();
+            }
+            if (entityNode["text"]["font"])
+            {
+                textComp.font = entityNode["text"]["font"].as<std::string>();
+            }
+            if (entityNode["text"]["size"])
+            {
+                textComp.size = entityNode["text"]["size"].as<int>();
+            }
+            if (entityNode["text"]["color"])
+            {
+                std::vector<float> col = entityNode["text"]["color"].as<std::vector<float>>();
+                if (col.size() >= 4)
+                {
+                    textComp.color = glm::vec4(col[0], col[1], col[2], col[3]);
+                }
+            }
+            Logger::Debug("[EntityLoader] TextComponent loaded with content: " + textComp.content);
+            coordinator->AddComponent<TextComponent>(entity, textComp);
+        }
+
+        // Load ButtonComponent if present
+        if (entityNode["button"])
+        {
+            ButtonComponent btnComp;
+            if (entityNode["button"]["action"])
+            {
+                btnComp.action = entityNode["button"]["action"].as<std::string>();
+            }
+            Logger::Debug("[EntityLoader] ButtonComponent loaded with action: " + btnComp.action);
+            coordinator->AddComponent<ButtonComponent>(entity, btnComp);
         }
 
         Logger::Info("[EntityLoader] Created entity: " + std::to_string(entity));

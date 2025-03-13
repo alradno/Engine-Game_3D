@@ -12,6 +12,11 @@ public:
     
     Shader() = default;
     
+    // Constructor sobrecargado que acepta las rutas del vertex y fragment shader.
+    Shader(const char* vertexPath, const char* fragmentPath) {
+        Compile(vertexPath, fragmentPath);
+    }
+    
     void Compile(const char* vertexPath, const char* fragmentPath) {
         std::string vertexCode, fragmentCode;
         std::ifstream vShaderFile, fShaderFile;

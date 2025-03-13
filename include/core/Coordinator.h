@@ -4,6 +4,7 @@
 #include "core/ComponentManager.h"
 #include "systems/SystemManager.h"
 #include <memory>
+#include <vector>
 
 class Coordinator {
 public:
@@ -67,6 +68,20 @@ public:
     template <typename T>
     void SetSystemSignature(ECS::Signature signature) {
         mSystemManager->SetSignature<T>(signature);
+    }
+
+    template <typename T>
+    std::vector<ECS::Entity> GetEntitiesWithComponent() {
+        std::vector<ECS::Entity> entities;
+        ECS::ComponentType compType = GetComponentType<T>();
+        // Se asume que ECS::MAX_ENTITIES define el rango de entidades posibles.
+        for (ECS::Entity entity = 0; entity < ECS::MAX_ENTITIES; ++entity) {
+            auto signature = mEntityManager->GetSignature(entity);
+            if (signature.test(compType)) {
+                entities.push_back(entity);
+            }
+        }
+        return entities;
     }
     
     // Nuevo método para limpiar todas las entidades (reset del ECS)

@@ -25,6 +25,9 @@ add_executable(Toxic
     ${CMAKE_SOURCE_DIR}/src/SceneResources.cpp
     ${CMAKE_SOURCE_DIR}/scenes/Scene1.cpp
     ${CMAKE_SOURCE_DIR}/scenes/Scene2.cpp
+    ${CMAKE_SOURCE_DIR}/scenes/MenuScene.cpp
+    ${CMAKE_SOURCE_DIR}/src/InputManager.cpp
+    ${CMAKE_SOURCE_DIR}/src/TextRenderer.cpp
 )
 
 # Specify the include directories for Toxic.
