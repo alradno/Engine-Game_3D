@@ -4,7 +4,7 @@
 #include <glad/glad.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
-#include "engine/SceneResources.h"  // Asegúrate de incluir el header correspondiente
+#include "engine/SceneResources.h"
 #include "utils/Logger.h"
 
 TextRenderer::TextRenderer(unsigned int width, unsigned int height, SceneResources* sceneResources)
@@ -20,7 +20,6 @@ TextRenderer::TextRenderer(unsigned int width, unsigned int height, SceneResourc
     glm::mat4 projection = glm::ortho(0.0f, static_cast<float>(width),
                                       0.0f, static_cast<float>(height));
     glUniformMatrix4fv(glGetUniformLocation(shader->ID, "projection"), 1, GL_FALSE, &projection[0][0]);
-    // Asignar el sampler "text" a la unidad 0.
     glUniform1i(glGetUniformLocation(shader->ID, "text"), 0);
 
     // Configurar VAO/VBO para renderizar quads.
@@ -39,7 +38,7 @@ TextRenderer::TextRenderer(unsigned int width, unsigned int height, SceneResourc
 TextRenderer::~TextRenderer() {
     glDeleteVertexArrays(1, &VAO);
     glDeleteBuffers(1, &VBO);
-    // Opcional: liberar las texturas de cada Character si es necesario.
+    // TODO: liberar las texturas de cada Character si es necesario.
 }
 
 void TextRenderer::Load(const std::string& font, unsigned int fontSize)
